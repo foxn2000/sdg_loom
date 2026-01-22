@@ -4,7 +4,8 @@ from collections import ChainMap
 from typing import Any, Dict, List, Optional
 
 from ..config import AIBlock, SDGConfig, OutputDef
-from ..llm_client import LLMClient
+from ..llm_client import LLMClient, LLMCallResult
+from ..profiler import ProfileCollector
 from ..utils import (
     render_template,
     has_image_placeholders,
@@ -159,6 +160,7 @@ async def _execute_ai_block_single(
     clients: Dict[str, LLMClient],
     exec_ctx: ExecutionContext,
     base_path: Optional[str] = None,
+    profiler: Optional[ProfileCollector] = None,
 ) -> Dict[str, Any]:
     """単一行のAIブロック実行"""
     # グローバル定数と変数をコンテキストに追加
@@ -206,12 +208,22 @@ async def _execute_ai_block_single(
         retry_on_empty = cfg.optimization.get("retry_on_empty", True)
         retry_cfg["retry_on_empty"] = retry_on_empty
     payload = {"model": model_def.api_model, "messages": msgs, **req_params}
-    text, err, _ = await client._one_chat(payload, retry_cfg)
+    result: LLMCallResult = await client._one_chat(payload, retry_cfg)
 
-    if err:
-        raise err
+    # プロファイラーにLLM呼び出しを記録
+    if profiler:
+        profiler.record_llm_call(
+            model_name=model_def.api_model,
+            prompt_tokens=result.prompt_tokens,
+            completion_tokens=result.completion_tokens,
+            latency_ms=result.latency_ms,
+            error=result.error is not None,
+        )
 
-    text = text or ""
+    if result.error:
+        raise result.error
+
+    text = result.content or ""
     out_map = _apply_outputs(
         text,
         block.outputs or [OutputDef(name="full", select="full")],

@@ -1,6 +1,6 @@
 from __future__ import annotations
 import asyncio
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set, TYPE_CHECKING
 
 from ..config import SDGConfig, PyBlock
 from .core import ExecutionContext, StreamingResult
@@ -13,6 +13,9 @@ from .scheduling import (
     MemoryConfig,
 )
 from .pipeline_core import process_single_row
+
+if TYPE_CHECKING:
+    from ..profiler import ProfileCollector
 
 
 async def run_pipeline_streaming(
@@ -31,6 +34,8 @@ async def run_pipeline_streaming(
     enable_memory_monitoring: bool = False,
     # 処理再開オプション
     processed_indices: Optional[Set[int]] = None,
+    # プロファイラー
+    profiler: Optional["ProfileCollector"] = None,
 ):
     """
     ストリーミング版パイプライン - 完了した行から順次yield
@@ -105,6 +110,7 @@ async def run_pipeline_streaming(
                     exec_ctx=row_exec_ctx,
                     save_intermediate=save_intermediate,
                     python_functions=python_functions,
+                    profiler=profiler,
                 )
                 await result_queue.put(
                     StreamingResult(

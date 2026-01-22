@@ -848,6 +848,248 @@ class SDGLogger:
             print(f"\n{status}{time_str}", file=sys.stderr)
 
 
+    def print_profile(self, profile: Dict[str, Any]) -> None:
+        """
+        プロファイル情報をターミナルに出力する。
+
+        Args:
+            profile: ProfileCollector.get_profile()の戻り値
+        """
+        if self.quiet:
+            return
+
+        title = "📊 生成後プロファイル" if self.locale == "ja" else "📊 Post-Generation Profile"
+
+        if self.use_rich:
+            panels = []
+
+            # 1. 処理統計パネル
+            proc = profile.get("processing", {})
+            proc_title = "処理統計" if self.locale == "ja" else "Processing Statistics"
+            proc_table = Table(show_header=False, box=None, padding=(0, 1))
+            proc_table.add_column("Key", style="cyan", no_wrap=True)
+            proc_table.add_column("Value", style="white")
+
+            proc_labels = {
+                "ja": {
+                    "total_rows": "総行数",
+                    "completed_rows": "完了行数",
+                    "error_rows": "エラー行数",
+                    "duration_seconds": "処理時間",
+                    "rows_per_second": "処理速度",
+                },
+                "en": {
+                    "total_rows": "Total Rows",
+                    "completed_rows": "Completed",
+                    "error_rows": "Errors",
+                    "duration_seconds": "Duration",
+                    "rows_per_second": "Speed",
+                },
+            }
+            labels = proc_labels.get(self.locale, proc_labels["en"])
+
+            proc_table.add_row(labels["total_rows"], str(proc.get("total_rows", 0)))
+            proc_table.add_row(
+                labels["completed_rows"],
+                f"[green]{proc.get('completed_rows', 0)}[/green]"
+            )
+            if proc.get("error_rows", 0) > 0:
+                proc_table.add_row(
+                    labels["error_rows"],
+                    f"[red]{proc.get('error_rows', 0)}[/red]"
+                )
+            proc_table.add_row(
+                labels["duration_seconds"],
+                f"{proc.get('duration_seconds', 0):.2f}s"
+            )
+            proc_table.add_row(
+                labels["rows_per_second"],
+                f"{proc.get('rows_per_second', 0):.2f} rows/sec"
+            )
+
+            panels.append(
+                Panel(proc_table, title=proc_title, border_style="blue", box=box.ROUNDED)
+            )
+
+            # 2. LLM使用量パネル
+            llm = profile.get("llm_usage", {})
+            if llm.get("total_calls", 0) > 0:
+                llm_title = "LLMトークン使用量" if self.locale == "ja" else "LLM Token Usage"
+                llm_table = Table(show_header=True, box=box.SIMPLE_HEAD, header_style="bold")
+                llm_table.add_column("Model", style="cyan")
+                llm_table.add_column("Calls", justify="right")
+                llm_table.add_column("Prompt", justify="right")
+                llm_table.add_column("Completion", justify="right")
+                llm_table.add_column("Total", justify="right")
+                llm_table.add_column("Avg Latency", justify="right")
+
+                # 全体統計
+                llm_table.add_row(
+                    "[bold]ALL[/bold]",
+                    str(llm.get("total_calls", 0)),
+                    f"{llm.get('total_prompt_tokens', 0):,}",
+                    f"{llm.get('total_completion_tokens', 0):,}",
+                    f"[yellow]{llm.get('total_tokens', 0):,}[/yellow]",
+                    "-",
+                )
+
+                # モデル別統計
+                by_model = llm.get("by_model", {})
+                for model_name, stats in by_model.items():
+                    avg_lat = stats.get("latency", {}).get("avg_ms", 0)
+                    llm_table.add_row(
+                        f"[dim]{model_name}[/dim]",
+                        str(stats.get("call_count", 0)),
+                        f"{stats.get('prompt_tokens', 0):,}",
+                        f"{stats.get('completion_tokens', 0):,}",
+                        f"{stats.get('total_tokens', 0):,}",
+                        f"{avg_lat:.0f}ms",
+                    )
+
+                panels.append(
+                    Panel(llm_table, title=llm_title, border_style="magenta", box=box.ROUNDED)
+                )
+
+            # 3. 出力品質パネル
+            quality = profile.get("output_quality", {})
+            if quality.get("total_outputs", 0) > 0:
+                quality_title = "出力品質" if self.locale == "ja" else "Output Quality"
+                quality_table = Table(show_header=False, box=None, padding=(0, 1))
+                quality_table.add_column("Metric", style="cyan")
+                quality_table.add_column("Value", style="white")
+
+                quality_labels = {
+                    "ja": {
+                        "total": "総出力数",
+                        "parse_fail": "パース失敗",
+                        "valid_fail": "検証失敗",
+                        "empty": "空出力",
+                    },
+                    "en": {
+                        "total": "Total Outputs",
+                        "parse_fail": "Parse Failures",
+                        "valid_fail": "Validation Failures",
+                        "empty": "Empty Outputs",
+                    },
+                }
+                ql = quality_labels.get(self.locale, quality_labels["en"])
+
+                quality_table.add_row(ql["total"], str(quality.get("total_outputs", 0)))
+
+                parse_fail = quality.get("parse_failures", 0)
+                parse_rate = quality.get("parse_failure_rate", 0)
+                color = "green" if parse_fail == 0 else "red"
+                quality_table.add_row(
+                    ql["parse_fail"],
+                    f"[{color}]{parse_fail} ({parse_rate:.1%})[/{color}]"
+                )
+
+                valid_fail = quality.get("validation_failures", 0)
+                valid_rate = quality.get("validation_failure_rate", 0)
+                color = "green" if valid_fail == 0 else "yellow"
+                quality_table.add_row(
+                    ql["valid_fail"],
+                    f"[{color}]{valid_fail} ({valid_rate:.1%})[/{color}]"
+                )
+
+                empty = quality.get("empty_outputs", 0)
+                empty_rate = quality.get("empty_output_rate", 0)
+                color = "green" if empty == 0 else "yellow"
+                quality_table.add_row(
+                    ql["empty"],
+                    f"[{color}]{empty} ({empty_rate:.1%})[/{color}]"
+                )
+
+                panels.append(
+                    Panel(quality_table, title=quality_title, border_style="green", box=box.ROUNDED)
+                )
+
+            # 4. 長さ分布パネル
+            length = profile.get("length_distribution", {})
+            if length.get("count", 0) > 0:
+                len_title = "長さ分布" if self.locale == "ja" else "Length Distribution"
+                len_table = Table(show_header=False, box=None, padding=(0, 1))
+                len_table.add_column("Stat", style="cyan")
+                len_table.add_column("Value", style="white")
+
+                len_table.add_row("Min", f"{length.get('min', 0):,} chars")
+                len_table.add_row("Max", f"{length.get('max', 0):,} chars")
+                len_table.add_row("Average", f"{length.get('avg', 0):,.1f} chars")
+                len_table.add_row("Median (P50)", f"{length.get('p50', 0):,.1f} chars")
+                len_table.add_row("P95", f"{length.get('p95', 0):,} chars")
+
+                panels.append(
+                    Panel(len_table, title=len_title, border_style="cyan", box=box.ROUNDED)
+                )
+
+            # 5. 重複検出パネル
+            dups = profile.get("duplicates", {})
+            dup_count = dups.get("duplicate_count", 0)
+            if dups.get("unique_outputs", 0) > 0:
+                dup_title = "重複検出" if self.locale == "ja" else "Duplicate Detection"
+                dup_table = Table(show_header=False, box=None, padding=(0, 1))
+                dup_table.add_column("Metric", style="cyan")
+                dup_table.add_column("Value", style="white")
+
+                dup_labels = {
+                    "ja": {"unique": "ユニーク出力", "dups": "重複", "rate": "重複率"},
+                    "en": {"unique": "Unique Outputs", "dups": "Duplicates", "rate": "Duplicate Rate"},
+                }
+                dl = dup_labels.get(self.locale, dup_labels["en"])
+
+                dup_table.add_row(dl["unique"], str(dups.get("unique_outputs", 0)))
+                color = "green" if dup_count == 0 else "yellow"
+                dup_table.add_row(dl["dups"], f"[{color}]{dup_count}[/{color}]")
+                dup_rate = dups.get("duplicate_rate", 0)
+                dup_table.add_row(dl["rate"], f"[{color}]{dup_rate:.1%}[/{color}]")
+
+                panels.append(
+                    Panel(dup_table, title=dup_title, border_style="yellow", box=box.ROUNDED)
+                )
+
+            # 6. 言語分布パネル
+            lang = profile.get("language_distribution", {})
+            if lang.get("detected", False):
+                lang_title = "言語分布" if self.locale == "ja" else "Language Distribution"
+                lang_table = Table(show_header=True, box=box.SIMPLE_HEAD, header_style="bold")
+                lang_table.add_column("Language", style="cyan")
+                lang_table.add_column("Count", justify="right")
+                lang_table.add_column("Rate", justify="right")
+
+                dist = lang.get("distribution", {})
+                for lang_code, info in list(dist.items())[:10]:  # Top 10
+                    lang_table.add_row(
+                        lang_code,
+                        str(info.get("count", 0)),
+                        f"{info.get('rate', 0):.1%}",
+                    )
+
+                panels.append(
+                    Panel(lang_table, title=lang_title, border_style="bright_blue", box=box.ROUNDED)
+                )
+
+            # メインパネルに全て包む
+            self.console.print()
+            self.console.print(
+                Panel(
+                    Group(*panels),
+                    title=title,
+                    title_align="left",
+                    border_style="bright_white",
+                    box=box.DOUBLE,
+                    padding=(1, 1),
+                )
+            )
+        else:
+            # Non-rich fallback
+            import json
+            print(f"\n{'=' * 60}", file=sys.stderr)
+            print(title, file=sys.stderr)
+            print(f"{'=' * 60}", file=sys.stderr)
+            print(json.dumps(profile, ensure_ascii=False, indent=2), file=sys.stderr)
+            print(f"{'=' * 60}\n", file=sys.stderr)
+
+
 class SimpleProgressTracker:
     """
     Simple progress tracker for when rich is not available

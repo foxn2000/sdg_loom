@@ -16,6 +16,7 @@ dependencies = [
     "datasets>=2.14.0",
     "rich>=13.0.0",
     "orjson>=3.9.0",
+    "langdetect>=1.0.9",
 ]
 
 [project.scripts]

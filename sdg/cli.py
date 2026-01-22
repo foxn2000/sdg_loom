@@ -107,6 +107,11 @@ JSONL出力クリーニングオプション:
   --disable-output-cleaning
                           出力JSONLのクリーニングを無効化（デフォルトは有効）
 
+プロファイルオプション:
+  --profile               生成後プロファイリングを有効化（言語分布、長さ分布、重複検出等）
+  --profile-output PATH   プロファイルJSONの出力パス
+  --profile-fields FIELDS 分析対象の出力フィールド名（カンマ区切り、デフォルト: 全フィールド）
+
 最適化オプション:
   --use-shared-transport  共有HTTPトランスポートを使用（コネクションプール共有）
   --no-http2              HTTP/2を無効化（デフォルトは有効）
@@ -132,6 +137,10 @@ JSONL出力クリーニングオプション:
 
   # 中間出力を保存
   sdg run --yaml config.yaml --input data.jsonl --output result.jsonl --save-intermediate
+
+  # 生成後プロファイリングを有効化（ターミナル表示 + JSON出力）
+  sdg run --yaml config.yaml --input data.jsonl --output result.jsonl \\
+    --profile --profile-output profile.json
 """
 
 # test-run command help message in Japanese
@@ -439,6 +448,25 @@ def build_run_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
         "--disable-output-cleaning",
         action="store_true",
         help="Disable output JSONL cleaning (enabled by default)",
+    )
+
+    # Profile options
+    p.add_argument(
+        "--profile",
+        action="store_true",
+        help="Enable post-generation profiling (language dist, length dist, duplicates, etc.)",
+    )
+    p.add_argument(
+        "--profile-output",
+        type=str,
+        default=None,
+        help="Path to save profile JSON file",
+    )
+    p.add_argument(
+        "--profile-fields",
+        type=str,
+        default=None,
+        help="Comma-separated list of output field names to profile (default: all non-meta fields)",
     )
 
     # Optimization options
@@ -767,6 +795,10 @@ def _execute_run(args):
             subset=args.subset,
             split=args.split,
             mapping=mapping,
+            # Profile options
+            enable_profile=args.profile,
+            profile_output_path=args.profile_output,
+            profile_output_fields=args.profile_fields.split(",") if args.profile_fields else None,
         )
 
 

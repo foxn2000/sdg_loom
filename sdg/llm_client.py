@@ -1,10 +1,27 @@
 from __future__ import annotations
 import asyncio
+from dataclasses import dataclass
 from typing import Any, ClassVar, Dict, List, Optional, Tuple
 
 import httpx
 from openai import AsyncOpenAI
 from .utils import now_ms
+
+
+@dataclass
+class LLMCallResult:
+    """LLM呼び出し結果"""
+    content: Optional[str]
+    error: Optional[Exception]
+    latency_ms: int
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+    @property
+    def success(self) -> bool:
+        """成功したかどうか"""
+        return self.error is None
 
 
 class LLMError(RuntimeError):
@@ -470,7 +487,17 @@ class LLMClient:
         self,
         payload: Dict[str, Any],
         retry_cfg: Dict[str, Any] | None = None,
-    ) -> Tuple[Optional[str], Optional[Exception], int]:
+    ) -> LLMCallResult:
+        """
+        単一のチャット呼び出しを実行する。
+
+        Args:
+            payload: リクエストペイロード
+            retry_cfg: リトライ設定
+
+        Returns:
+            LLMCallResult: 呼び出し結果（コンテンツ、エラー、レイテンシ、トークン使用量）
+        """
         t0 = now_ms()
         # デフォルトのリトライ回数を増やしてタイムアウトエラーへの耐性を高める
         attempts = int((retry_cfg or {}).get("max_attempts", 10))
@@ -507,6 +534,15 @@ class LLMClient:
                     )
                     content = resp.choices[0].message.content
 
+                    # トークン使用量を抽出
+                    prompt_tokens = 0
+                    completion_tokens = 0
+                    total_tokens = 0
+                    if hasattr(resp, "usage") and resp.usage is not None:
+                        prompt_tokens = getattr(resp.usage, "prompt_tokens", 0) or 0
+                        completion_tokens = getattr(resp.usage, "completion_tokens", 0) or 0
+                        total_tokens = getattr(resp.usage, "total_tokens", 0) or 0
+
                     # 空返答チェック: contentがNone、空文字列、またはwhitespaceのみの場合
                     if retry_on_empty and (content is None or not content.strip()):
                         # まだ空返答リトライ回数が残っている場合はリトライ
@@ -515,9 +551,23 @@ class LLMClient:
                             delay_ms = int(delay_ms * factor)
                             break  # 内側ループを抜けて外側ループで再試行
                         # max_empty_retriesを超えた場合はそのまま返す（エラーにはしない）
-                        return content, None, now_ms() - t0
+                        return LLMCallResult(
+                            content=content,
+                            error=None,
+                            latency_ms=now_ms() - t0,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            total_tokens=total_tokens,
+                        )
 
-                    return content, None, now_ms() - t0
+                    return LLMCallResult(
+                        content=content,
+                        error=None,
+                        latency_ms=now_ms() - t0,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        total_tokens=total_tokens,
+                    )
                 except Exception as e:
                     # Try to classify retryable errors similar to original logic
                     status = getattr(e, "status_code", None)
@@ -549,14 +599,22 @@ class LLMClient:
                         delay_ms = int(delay_ms * factor)
                         continue
 
-                    return None, LLMError(str(e)), now_ms() - t0
+                    return LLMCallResult(
+                        content=None,
+                        error=LLMError(str(e)),
+                        latency_ms=now_ms() - t0,
+                    )
             else:
                 # 内側ループが正常に完了した場合（breakで抜けなかった場合）
                 # これはエラーリトライが尽きた場合
                 continue
             # breakで抜けた場合（空返答リトライ）は外側ループを続行
 
-        return None, LLMError("Retry attempts exhausted"), now_ms() - t0
+        return LLMCallResult(
+            content=None,
+            error=LLMError("Retry attempts exhausted"),
+            latency_ms=now_ms() - t0,
+        )
 
     async def batched_chat(
         self,
@@ -567,19 +625,18 @@ class LLMClient:
         ],  # content can be string or list (multimodal)
         request_params: Dict[str, Any],
         batch_size: int,
-    ) -> Tuple[List[Optional[str]], List[int], int]:
+    ) -> Tuple[List[LLMCallResult], int]:
         """Run many chats concurrently with bounded concurrency = batch_size.
 
         Supports multimodal messages where content is a list of text/image parts:
         [{"type": "text", "text": "..."}, {"type": "image_url", "image_url": {"url": "..."}}]
 
-        Returns (results, latencies_ms_per_task, error_count)
+        Returns (results_list, error_count)
         """
         limit = asyncio.Semaphore(batch_size)
 
         tasks = []
-        latencies: List[int] = []
-        results: List[Optional[str]] = [None] * len(messages_list)
+        results: List[LLMCallResult] = [None] * len(messages_list)  # type: ignore
         errors = 0
 
         async def runner(idx: int, msgs: List[Dict[str, Any]]):
@@ -587,14 +644,13 @@ class LLMClient:
             async with limit:
                 retry_cfg = (request_params or {}).get("retry")
                 payload = {"model": model, "messages": msgs, **(request_params or {})}
-                out, err, latency = await self._one_chat(payload, retry_cfg)
-                latencies.append(latency)
-                if err:
+                result = await self._one_chat(payload, retry_cfg)
+                if result.error:
                     errors += 1
-                results[idx] = out
+                results[idx] = result
 
         for i, msgs in enumerate(messages_list):
             tasks.append(asyncio.create_task(runner(i, msgs)))
         await asyncio.gather(*tasks)
 
-        return results, latencies, errors
+        return results, errors

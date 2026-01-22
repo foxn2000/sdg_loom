@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from ..config import (
     SDGConfig,
@@ -17,6 +17,9 @@ from .logic import _apply_logic_block
 from .python import _load_python_function, _execute_python_block_single
 from .ai import _execute_ai_block_single
 
+if TYPE_CHECKING:
+    from ..profiler import ProfileCollector
+
 
 async def process_single_row(
     row_index: int,
@@ -27,6 +30,7 @@ async def process_single_row(
     *,
     save_intermediate: bool = False,
     python_functions: Optional[Dict[str, Any]] = None,
+    profiler: Optional["ProfileCollector"] = None,
 ) -> Dict[str, Any]:
     """
     1つのデータ行に対して全ブロックを順次実行し、最終結果を返す。
@@ -39,6 +43,7 @@ async def process_single_row(
         exec_ctx: 実行コンテキスト（行ごとに独立したコピーを渡すこと）
         save_intermediate: 中間結果を保存するか
         python_functions: プリロードされたPython関数（キャッシュ用）
+        profiler: プロファイラー（オプション）
 
     Returns:
         処理結果の辞書
@@ -68,7 +73,7 @@ async def process_single_row(
         try:
             if isinstance(block, AIBlock):
                 out_map = await _execute_ai_block_single(
-                    block, ctx, cfg, clients, exec_ctx
+                    block, ctx, cfg, clients, exec_ctx, profiler=profiler
                 )
                 if save_intermediate:
                     result.update({f"_{block.exec}_{k}": v for k, v in out_map.items()})
