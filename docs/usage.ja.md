@@ -225,6 +225,90 @@ sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl \
 |-----------|------|
 | `--save-intermediate` | 中間結果を保存する |
 
+### 生成後プロファイリング
+
+SDGは、生成された出力の統計情報を収集して、データ品質と分布を分析するのに役立てることができます。
+
+```bash
+# プロファイリングを有効化してコンソールに出力
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl --profile
+
+# プロファイルをJSONファイルに保存
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl \
+  --profile --profile-output profile_stats.json
+
+# 分析する出力フィールドを指定
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl \
+  --profile --profile-fields "answer,summary"
+```
+
+**プロファイリングオプション:**
+
+| オプション | デフォルト | 説明 |
+|-----------|-----------|------|
+| `--profile` | false | 生成後プロファイリングを有効化 |
+| `--profile-output` | - | プロファイル統計をJSONとして保存するパス |
+| `--profile-fields` | - | プロファイル対象の出力フィールド（カンマ区切り） |
+
+**収集される統計情報:**
+
+プロファイラーは、指定された各フィールドについて以下のメトリクスを収集します：
+
+| メトリクス | 説明 |
+|-----------|------|
+| 言語分布 | 検出された各言語の出力の割合 |
+| 長さ統計 | 最小、最大、平均、中央値の文字数/トークン数 |
+| 重複検出 | 重複した出力の数と割合 |
+| LLM使用量 | トークン消費量とAPIコール統計 |
+
+**出力例:**
+
+```json
+{
+  "field_stats": {
+    "answer": {
+      "language_distribution": {
+        "en": 0.85,
+        "ja": 0.10,
+        "other": 0.05
+      },
+      "length_stats": {
+        "min": 45,
+        "max": 2048,
+        "avg": 350.5,
+        "median": 280
+      },
+      "duplicate_count": 3,
+      "duplicate_rate": 0.015
+    }
+  },
+  "llm_usage": {
+    "total_prompt_tokens": 125000,
+    "total_completion_tokens": 45000,
+    "total_requests": 200
+  },
+  "total_outputs": 200
+}
+```
+
+**Python API:**
+
+```python
+from sdg.runner import run_streaming
+from sdg.profiler import ProfileCollector
+
+# Python APIでプロファイリングを有効化
+run_streaming(
+    yaml_path="pipeline.yaml",
+    input_path="data.jsonl",
+    output_path="result.jsonl",
+    max_concurrent=8,
+    enable_profile=True,
+    profile_output_path="profile_stats.json",
+    profile_output_fields=["answer", "summary"],
+)
+```
+
 ### 最適化オプション
 
 SDGは高速化とリソース効率化のための最適化オプションを提供しています：

@@ -14,7 +14,7 @@ models:
   - name: qwen3
     api_model: "qwen3"
     api_key: "sk-local"
-    base_url: http://localhost:11434/v1
+    base_url: http://localhost:8000/v1
     request_defaults:
       temperature: 0.7
       max_tokens: 4096
@@ -358,8 +358,12 @@ blocks:
       - selection_reason
 
 # 実行コマンド例:
-# python -m sdg run \
+# Not found that everyone. No. Hey, Billy. Hello. Call. Where they can kick you off. No one night at the moment can do no more. Just like that you guys. Mobile. Let me I can go. Take us. Instrumental. Artist. python -m sdg run \
 #   --yaml examples/question_generator_agent.yaml \
 #   --input examples/data/question_generator_input.jsonl \
 #   --output output/generated_questions.jsonl \
+#   --adaptive \
+#   --use-vllm-metrics \
+#   --min-batch 1 \
+#   --max-batch 64 \ 
 #   --save-intermediate

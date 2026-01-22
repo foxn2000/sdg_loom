@@ -225,6 +225,90 @@ The adaptive controller uses an algorithm inspired by TCP congestion control (Ve
 |--------|-------------|
 | `--save-intermediate` | Save intermediate results |
 
+### Post-Generation Profiling
+
+SDG can collect statistics about generated outputs to help analyze data quality and distribution.
+
+```bash
+# Enable profiling and output to console
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl --profile
+
+# Save profile to a JSON file
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl \
+  --profile --profile-output profile_stats.json
+
+# Specify which output fields to analyze
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl \
+  --profile --profile-fields "answer,summary"
+```
+
+**Profiling Options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--profile` | false | Enable post-generation profiling |
+| `--profile-output` | - | Path to save profile statistics as JSON |
+| `--profile-fields` | - | Comma-separated list of output fields to profile |
+
+**Collected Statistics:**
+
+The profiler collects the following metrics for each specified field:
+
+| Metric | Description |
+|--------|-------------|
+| Language Distribution | Percentage of outputs in each detected language |
+| Length Statistics | Min, max, average, and median character/token counts |
+| Duplicate Detection | Number and percentage of duplicate outputs |
+| LLM Usage | Token consumption and API call statistics |
+
+**Example Output:**
+
+```json
+{
+  "field_stats": {
+    "answer": {
+      "language_distribution": {
+        "en": 0.85,
+        "ja": 0.10,
+        "other": 0.05
+      },
+      "length_stats": {
+        "min": 45,
+        "max": 2048,
+        "avg": 350.5,
+        "median": 280
+      },
+      "duplicate_count": 3,
+      "duplicate_rate": 0.015
+    }
+  },
+  "llm_usage": {
+    "total_prompt_tokens": 125000,
+    "total_completion_tokens": 45000,
+    "total_requests": 200
+  },
+  "total_outputs": 200
+}
+```
+
+**Python API:**
+
+```python
+from sdg.runner import run_streaming
+from sdg.profiler import ProfileCollector
+
+# Enable profiling in Python API
+run_streaming(
+    yaml_path="pipeline.yaml",
+    input_path="data.jsonl",
+    output_path="result.jsonl",
+    max_concurrent=8,
+    enable_profile=True,
+    profile_output_path="profile_stats.json",
+    profile_output_fields=["answer", "summary"],
+)
+```
+
 ### Optimization Options
 
 SDG provides optimization options for improved performance and resource efficiency:

@@ -45,6 +45,12 @@ This framework is designed with a focus on large-scale, high-speed, and stable u
   * HTTP/2 support for improved throughput
   * Asynchronous buffered I/O for efficient file operations
   * Phase 2: Hierarchical task scheduling and memory optimization (see [Phase 2 Optimization Guide](docs/phase2_optimization.md))
+* **Post-Generation Profiling**
+  * Language distribution analysis
+  * Output length distribution statistics
+  * Duplicate detection and deduplication rate
+  * Parse/validation failure rate tracking
+  * LLM token usage statistics per model
 
 ---
 

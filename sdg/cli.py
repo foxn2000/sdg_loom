@@ -728,6 +728,12 @@ def _execute_run(args):
                 subset=args.subset,
                 split=args.split,
                 mapping=mapping,
+                # Profile options
+                enable_profile=args.profile,
+                profile_output_path=args.profile_output,
+                profile_output_fields=(
+                    args.profile_fields.split(",") if args.profile_fields else None
+                ),
             )
         else:
             run_streaming_adaptive(
@@ -762,6 +768,12 @@ def _execute_run(args):
                 subset=args.subset,
                 split=args.split,
                 mapping=mapping,
+                # Profile options
+                enable_profile=args.profile,
+                profile_output_path=args.profile_output,
+                profile_output_fields=(
+                    args.profile_fields.split(",") if args.profile_fields else None
+                ),
             )
     else:
         # Streaming mode: row-by-row processing with fixed concurrency (default)
@@ -798,7 +810,9 @@ def _execute_run(args):
             # Profile options
             enable_profile=args.profile,
             profile_output_path=args.profile_output,
-            profile_output_fields=args.profile_fields.split(",") if args.profile_fields else None,
+            profile_output_fields=(
+                args.profile_fields.split(",") if args.profile_fields else None
+            ),
         )
 
 

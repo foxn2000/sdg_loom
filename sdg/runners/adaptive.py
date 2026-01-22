@@ -1,11 +1,13 @@
 from __future__ import annotations
 import asyncio
+import json
 import os
-from typing import Any, Dict, Iterable, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 from ..config import load_config
 from ..executors import run_pipeline_streaming_adaptive
 from ..logger import get_logger
+from ..profiler import ProfileCollector
 from ..io import (
     AsyncBufferedWriter,
     count_lines_fast,
@@ -44,6 +46,8 @@ async def _run_streaming_adaptive_async(
     # Resume options
     processed_indices: Optional[Set[int]] = None,
     append: bool = False,
+    # Profile options
+    profiler: Optional[ProfileCollector] = None,
 ):
     """
     適応的並行性制御付きストリーミング版パイプライン実行（非同期）。
@@ -68,6 +72,7 @@ async def _run_streaming_adaptive_async(
         total: 総データ数（不明な場合はNone）
         processed_indices: 処理済み行インデックスのセット（再開時に使用）
         append: 追記モードで開くか（再開時はTrue）
+        profiler: プロファイル収集インスタンス（オプション）
 
     Returns:
         (完了数, エラー数) のタプル
@@ -127,12 +132,18 @@ async def _run_streaming_adaptive_async(
                             **result.data,
                         }
                         await writer.write(result_with_error)
+                        # プロファイラーにエラーを記録
+                        if profiler:
+                            profiler.record_output(result.data, error=result.error)
                     else:
                         result_data = {
                             "_row_index": result.row_index,
                             **result.data,
                         }
                         await writer.write(result_data)
+                        # プロファイラーに出力を記録
+                        if profiler:
+                            profiler.record_output(result.data)
 
                     progress.update(task, advance=1)
         else:
@@ -164,12 +175,18 @@ async def _run_streaming_adaptive_async(
                         **result.data,
                     }
                     await writer.write(result_with_error)
+                    # プロファイラーにエラーを記録
+                    if profiler:
+                        profiler.record_output(result.data, error=result.error)
                 else:
                     result_data = {
                         "_row_index": result.row_index,
                         **result.data,
                     }
                     await writer.write(result_data)
+                    # プロファイラーに出力を記録
+                    if profiler:
+                        profiler.record_output(result.data)
 
     logger = get_logger()
     if show_progress:
@@ -218,6 +235,10 @@ def run_streaming_adaptive(
     subset: Optional[str] = None,
     split: str = "train",
     mapping: Optional[Dict[str, str]] = None,
+    # Profile options
+    enable_profile: bool = False,
+    profile_output_path: Optional[str] = None,
+    profile_output_fields: Optional[List[str]] = None,
 ):
     """
     適応的並行性制御付きストリーミング版パイプライン実行
@@ -250,6 +271,9 @@ def run_streaming_adaptive(
         subset: データセットサブセット
         split: データセットスプリット
         mapping: キーマッピング辞書
+        enable_profile: プロファイル収集を有効化
+        profile_output_path: プロファイルJSONの出力パス
+        profile_output_fields: プロファイル対象の出力フィールド名リスト
 
     Note:
         出力順序は処理完了順となるため、入力順序と異なる場合がある。
@@ -361,6 +385,12 @@ def run_streaming_adaptive(
             }
             logger.table("Execution Configuration", config_info)
 
+    # プロファイラーの初期化
+    profiler = None
+    if enable_profile:
+        profiler = ProfileCollector(output_fields=profile_output_fields)
+        profiler.start()
+
     # run
     asyncio.run(
         _run_streaming_adaptive_async(
@@ -384,5 +414,25 @@ def run_streaming_adaptive(
             total=remaining_count,
             processed_indices=processed_indices,
             append=append_mode,
+            profiler=profiler,
         )
     )
+
+    # プロファイル出力
+    if profiler:
+        profiler.stop()
+        profile_data = profiler.get_profile()
+
+        # ターミナルに表示
+        if show_progress:
+            logger.print_profile(profile_data)
+
+        # JSONファイルに出力
+        if profile_output_path:
+            with open(profile_output_path, "w", encoding="utf-8") as f:
+                json.dump(profile_data, f, ensure_ascii=False, indent=2)
+            if show_progress:
+                if logger.locale == "ja":
+                    logger.info(f"プロファイルを保存しました: {profile_output_path}")
+                else:
+                    logger.info(f"Profile saved to: {profile_output_path}")
