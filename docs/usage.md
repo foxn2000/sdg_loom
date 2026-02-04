@@ -225,6 +225,53 @@ The adaptive controller uses an algorithm inspired by TCP congestion control (Ve
 |--------|-------------|
 | `--save-intermediate` | Save intermediate results |
 
+### Data Limit and Skip Options
+
+SDG provides several options to control which portion of the input data to process:
+
+```bash
+# Process only the first 500 rows
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl --max-inputs 500
+
+# Skip the first 100 rows and process the rest
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl --skip 100
+
+# Skip 100 rows and process only the next 200 rows
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl --skip 100 --max-inputs 200
+
+# Resume processing from existing output file (skips already processed rows)
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl --resume
+```
+
+**Options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--max-inputs`, `-n` | - | Maximum number of rows to process (None = all rows) |
+| `--skip`, `--skip-lines` | 0 | Number of rows to skip from the beginning |
+| `--resume` | false | Resume from existing output file (auto-detect processed rows) |
+
+**Features:**
+
+- **`--max-inputs`**: Limits the total number of rows to process (after skipping)
+- **`--skip`**: Skips the specified number of rows from the beginning of the input file
+- **`--resume`**: Automatically detects which rows have already been processed (based on `_row_index` field in output file) and skips them
+  - When `--resume` is specified, `--skip` is ignored
+  - Useful for restarting interrupted jobs without reprocessing completed data
+  - Output file is opened in append mode to preserve existing results
+
+**Use Cases:**
+
+- **Data Splitting**: Process different chunks on different machines
+  - Machine 1: `--skip 0 --max-inputs 1000`
+  - Machine 2: `--skip 1000 --max-inputs 1000`
+  - Machine 3: `--skip 2000 --max-inputs 1000`
+- **Incremental Processing**: Process new data appended to input file
+  - First run: `--max-inputs 1000` → processes rows 0-999
+  - Second run: `--skip 1000` → processes rows 1000+
+- **Job Recovery**: Resume interrupted processing
+  - Job interrupted after 500 rows → restart with `--resume`
+
 ### Post-Generation Profiling
 
 SDG can collect statistics about generated outputs to help analyze data quality and distribution.

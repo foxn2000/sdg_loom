@@ -483,7 +483,7 @@ def count_lines_fast(path: str) -> Optional[int]:
     return None
 
 
-def read_jsonl(path: str, max_inputs: Optional[int] = None) -> Iterator[Dict[str, Any]]:
+def read_jsonl(path: str, max_inputs: Optional[int] = None, skip_lines: int = 0) -> Iterator[Dict[str, Any]]:
     """
     JSONLファイルをジェネレータとして読み込む（省メモリ版）。
 
@@ -493,21 +493,28 @@ def read_jsonl(path: str, max_inputs: Optional[int] = None) -> Iterator[Dict[str
     Args:
         path: 入力ファイルパス
         max_inputs: 読み込む最大行数（Noneの場合は全件）
+        skip_lines: 先頭からスキップする行数（デフォルト: 0）
 
     Yields:
         各行をパースした辞書
     """
     count = 0
+    skipped = 0
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
-            if max_inputs is not None and count >= max_inputs:
-                break
             if line.strip():
+                # スキップ処理
+                if skipped < skip_lines:
+                    skipped += 1
+                    continue
+
+                if max_inputs is not None and count >= max_inputs:
+                    break
                 yield json.loads(line)
                 count += 1
 
 
-def read_csv(path: str, max_inputs: Optional[int] = None) -> Iterator[Dict[str, Any]]:
+def read_csv(path: str, max_inputs: Optional[int] = None, skip_lines: int = 0) -> Iterator[Dict[str, Any]]:
     """
     CSVファイルをジェネレータとして読み込む（省メモリ版）。
 
@@ -517,14 +524,21 @@ def read_csv(path: str, max_inputs: Optional[int] = None) -> Iterator[Dict[str, 
     Args:
         path: 入力ファイルパス
         max_inputs: 読み込む最大行数（Noneの場合は全件）
+        skip_lines: 先頭からスキップする行数（デフォルト: 0）
 
     Yields:
         各行を辞書に変換したもの
     """
     count = 0
+    skipped = 0
     with open(path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
+            # スキップ処理
+            if skipped < skip_lines:
+                skipped += 1
+                continue
+
             if max_inputs is not None and count >= max_inputs:
                 break
             yield dict(row)  # OrderedDictを通常のdictに変換
@@ -536,6 +550,7 @@ def read_hf_dataset(
     subset: Optional[str] = None,
     split: str = "train",
     max_inputs: Optional[int] = None,
+    skip_lines: int = 0,
 ) -> Iterator[Dict[str, Any]]:
     """
     Hugging Face Datasetをジェネレータとして読み込む（省メモリ版）。
@@ -545,6 +560,7 @@ def read_hf_dataset(
         subset: サブセット名（オプション）
         split: スプリット名（デフォルト: train）
         max_inputs: 読み込む最大行数（Noneの場合は全件）
+        skip_lines: 先頭からスキップする行数（デフォルト: 0）
 
     Yields:
         辞書
@@ -564,7 +580,13 @@ def read_hf_dataset(
     ds = load_dataset(dataset_name, name=subset, split=split, streaming=True)
 
     count = 0
+    skipped = 0
     for item in ds:
+        # スキップ処理
+        if skipped < skip_lines:
+            skipped += 1
+            continue
+
         if max_inputs is not None and count >= max_inputs:
             break
         yield dict(item)

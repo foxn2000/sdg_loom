@@ -225,6 +225,53 @@ sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl \
 |-----------|------|
 | `--save-intermediate` | 中間結果を保存する |
 
+### データ制限・スキップオプション
+
+SDGは、入力データのどの部分を処理するかを制御するためのオプションを提供しています：
+
+```bash
+# 最初の500行のみ処理
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl --max-inputs 500
+
+# 最初の100行をスキップして残りを処理
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl --skip 100
+
+# 100行スキップして次の200行のみ処理
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl --skip 100 --max-inputs 200
+
+# 既存の出力ファイルから処理を再開（処理済み行を自動スキップ）
+sdg run --yaml pipeline.yaml --input data.jsonl --output result.jsonl --resume
+```
+
+**オプション:**
+
+| オプション | デフォルト | 説明 |
+|-----------|-----------|------|
+| `--max-inputs`, `-n` | - | 処理する最大行数（None = 全行処理） |
+| `--skip`, `--skip-lines` | 0 | 先頭からスキップする行数 |
+| `--resume` | false | 既存の出力ファイルから再開（処理済み行を自動検出） |
+
+**特徴:**
+
+- **`--max-inputs`**: 処理する行数の上限を設定（スキップ後の行数）
+- **`--skip`**: 入力ファイルの先頭から指定行数をスキップ
+- **`--resume`**: 出力ファイルの`_row_index`フィールドに基づいて処理済み行を自動検出してスキップ
+  - `--resume`指定時は`--skip`オプションは無視されます
+  - 中断したジョブを再起動する際、完了済みデータの再処理を避けるのに便利
+  - 出力ファイルは追記モードで開かれ、既存の結果が保持されます
+
+**ユースケース:**
+
+- **データ分割処理**: 異なるマシンで異なるチャンクを処理
+  - マシン1: `--skip 0 --max-inputs 1000`
+  - マシン2: `--skip 1000 --max-inputs 1000`
+  - マシン3: `--skip 2000 --max-inputs 1000`
+- **インクリメンタル処理**: 入力ファイルに追加された新しいデータを処理
+  - 初回実行: `--max-inputs 1000` → 行0-999を処理
+  - 2回目実行: `--skip 1000` → 行1000以降を処理
+- **ジョブ復旧**: 中断された処理を再開
+  - 500行処理後にジョブが中断 → `--resume`で再起動
+
 ### 生成後プロファイリング
 
 SDGは、生成された出力の統計情報を収集して、データ品質と分布を分析するのに役立てることができます。

@@ -239,6 +239,8 @@ def run_streaming_adaptive_batched(
     enable_memory_monitoring: bool = False,
     # Data limit options
     max_inputs: Optional[int] = None,
+    skip_lines: int = 0,
+    resume: bool = False,
     # HF Dataset options
     dataset_name: Optional[str] = None,
     subset: Optional[str] = None,
@@ -304,7 +306,8 @@ def run_streaming_adaptive_batched(
     append = False
     logger = get_logger()
 
-    if os.path.exists(output_path):
+    # 再開機能: 既存の出力ファイルをチェック
+    if resume and os.path.exists(output_path):
         # 既存の出力ファイルから処理済み行のインデックスを読み込む
         processed_indices, processed_count = load_processed_indices(output_path)
         if processed_count > 0:
@@ -319,27 +322,41 @@ def run_streaming_adaptive_batched(
                         f"Detected existing output file. Resuming from {processed_count} processed records."
                     )
 
+    # スキップ機能: 先頭から指定行数をスキップ
+    if skip_lines > 0 and not resume:
+        if show_progress:
+            if logger.locale == "ja":
+                logger.info(f"先頭から{skip_lines}行をスキップします。")
+            else:
+                logger.info(f"Skipping first {skip_lines} lines.")
+
     # load data and count lines for progress display
     total: Optional[int] = None
+    actual_skip = skip_lines if not resume else 0  # resumeの場合はskip_linesを無視
+
     if input_path:
         if input_path.endswith(".jsonl"):
             # 高速行数カウント（wcコマンド使用）
             total = count_lines_fast(input_path)
+            if total is not None and actual_skip > 0:
+                total = max(0, total - actual_skip)
             if max_inputs is not None and total is not None:
                 total = min(total, max_inputs)
-            ds = read_jsonl(input_path, max_inputs=max_inputs)
+            ds = read_jsonl(input_path, max_inputs=max_inputs, skip_lines=actual_skip)
         elif input_path.endswith(".csv"):
             # CSVの場合は行数カウント（ヘッダー行を除く）
             line_count = count_lines_fast(input_path)
             if line_count is not None:
                 total = line_count - 1  # ヘッダー行を除く
+                if actual_skip > 0:
+                    total = max(0, total - actual_skip)
                 if max_inputs is not None:
                     total = min(total, max_inputs)
-            ds = read_csv(input_path, max_inputs=max_inputs)
+            ds = read_csv(input_path, max_inputs=max_inputs, skip_lines=actual_skip)
         else:
             raise ValueError("Unsupported input format. Use .jsonl or .csv")
     elif dataset_name:
-        ds = read_hf_dataset(dataset_name, subset, split, max_inputs=max_inputs)
+        ds = read_hf_dataset(dataset_name, subset, split, max_inputs=max_inputs, skip_lines=actual_skip)
         # HF Datasetの場合は総数が不明（streaming=True）
         total = max_inputs  # max_inputsが指定されていればそれを使用
     else:

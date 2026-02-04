@@ -48,6 +48,9 @@ YAMLブループリントを入力データセットに対して実行
 データ制限オプション:
   --max-inputs MAX_INPUTS, -n MAX_INPUTS
                           処理する最大入力データ数（デフォルト: 全件処理）
+  --skip SKIP, --skip-lines SKIP
+                          先頭からスキップする行数（デフォルト: 0）
+  --resume                既存の出力ファイルから処理済み行を検出して再開
 
 Hugging Face データセットオプション:
   --dataset DATASET       Hugging Face データセット名
@@ -122,6 +125,12 @@ JSONL出力クリーニングオプション:
 
   # 最大500件のみ処理
   sdg run --yaml config.yaml --input data.jsonl --output result.jsonl --max-inputs 500
+
+  # 先頭100行をスキップして処理
+  sdg run --yaml config.yaml --input data.jsonl --output result.jsonl --skip 100
+
+  # 既存の出力ファイルから処理済み行を検出して再開
+  sdg run --yaml config.yaml --input data.jsonl --output result.jsonl --resume
 
   # 適応的並行性制御を有効化（並行数が動的に調整される）
   sdg run --yaml config.yaml --input data.jsonl --output result.jsonl \\
@@ -272,6 +281,19 @@ def build_run_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Maximum number of input data to process (default: process all)",
+    )
+    p.add_argument(
+        "--skip",
+        "--skip-lines",
+        type=int,
+        default=0,
+        dest="skip_lines",
+        help="Number of input lines to skip from the beginning (default: 0)",
+    )
+    p.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume from existing output file (skip already processed rows based on _row_index)",
     )
 
     # Hugging Face Dataset options
@@ -644,6 +666,16 @@ def _execute_run(args):
             logger.error("--max-inputs must be a positive integer.")
             sys.exit(1)
 
+    # Validate skip_lines
+    if args.skip_lines < 0:
+        logger.error("--skip must be a non-negative integer.")
+        sys.exit(1)
+
+    # Validate resume and skip_lines conflict
+    if args.resume and args.skip_lines > 0:
+        logger.error("Cannot use both --resume and --skip at the same time.")
+        sys.exit(1)
+
     # Parse mapping
     mapping = {}
     if args.mapping:
@@ -723,6 +755,8 @@ def _execute_run(args):
                 enable_memory_monitoring=args.enable_memory_monitoring,
                 # Data limit options
                 max_inputs=args.max_inputs,
+                skip_lines=args.skip_lines,
+                resume=args.resume,
                 # HF Dataset options
                 dataset_name=args.dataset,
                 subset=args.subset,
@@ -763,6 +797,8 @@ def _execute_run(args):
                 enable_memory_monitoring=args.enable_memory_monitoring,
                 # Data limit options
                 max_inputs=args.max_inputs,
+                skip_lines=args.skip_lines,
+                resume=args.resume,
                 # HF Dataset options
                 dataset_name=args.dataset,
                 subset=args.subset,
@@ -802,6 +838,8 @@ def _execute_run(args):
             memory_threshold_mb=args.memory_threshold_mb,
             # Data limit options
             max_inputs=args.max_inputs,
+            skip_lines=args.skip_lines,
+            resume=args.resume,
             # HF Dataset options
             dataset_name=args.dataset,
             subset=args.subset,
