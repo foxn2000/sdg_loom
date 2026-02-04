@@ -17,6 +17,7 @@ class LLMCallResult:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+    reasoning: Optional[str] = None  # Reasoning思考プロセス
 
     @property
     def success(self) -> bool:
@@ -511,6 +512,7 @@ class LLMClient:
         max_empty_retries = int((retry_cfg or {}).get("max_empty_retries", 3))
 
         # Remove internal keys not supported by the SDK API
+        # Note: extra_body は SDK がサポートするので残す
         req = {k: v for k, v in payload.items() if k not in ("retry", "timeout_sec")}
         per_req_timeout = payload.get("timeout_sec", None)
 
@@ -533,6 +535,11 @@ class LLMClient:
                         timeout=per_req_timeout or self.timeout,
                     )
                     content = resp.choices[0].message.content
+
+                    # Reasoning抽出
+                    reasoning = None
+                    if hasattr(resp.choices[0].message, "reasoning"):
+                        reasoning = resp.choices[0].message.reasoning
 
                     # トークン使用量を抽出
                     prompt_tokens = 0
@@ -558,6 +565,7 @@ class LLMClient:
                             prompt_tokens=prompt_tokens,
                             completion_tokens=completion_tokens,
                             total_tokens=total_tokens,
+                            reasoning=reasoning,
                         )
 
                     return LLMCallResult(
@@ -567,6 +575,7 @@ class LLMClient:
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
                         total_tokens=total_tokens,
+                        reasoning=reasoning,
                     )
                 except Exception as e:
                     # Try to classify retryable errors similar to original logic

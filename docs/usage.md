@@ -539,6 +539,52 @@ for b in cfg.blocks:
 
 ---
 
+## Reasoning Output Feature
+
+SDG supports outputting the LLM model's thinking process (Reasoning) alongside the response. This feature allows you to see how the model solved the problem.
+
+### Basic Usage
+
+Enable Reasoning in the `models` section of your MABEL YAML:
+
+```yaml
+models:
+  - name: reasoning_model
+    api_model: openai/gpt-oss-120b
+    api_key: "${ENV.OPENROUTER_API_KEY}"
+    base_url: https://openrouter.ai/api
+    include_reasoning: true        # Enable reasoning output
+    reasoning_effort: low          # Effort level: low/medium/high
+    request_defaults:
+      temperature: 0.7
+      max_tokens: 8192
+```
+
+### Output Format
+
+When Reasoning is enabled, AI block outputs include the thinking process wrapped in `<think></think>` tags:
+
+```
+<think>
+[Model's thinking process]
+</think>
+[Actual response]
+```
+
+### Example Usage
+
+```bash
+# Run pipeline with reasoning enabled
+sdg run \
+  --yaml examples/reasoning_demo.yaml \
+  --input data.jsonl \
+  --output result.jsonl
+```
+
+**Detailed Documentation**: See the [Reasoning Output Feature Guide](features/reasoning_output.md) for more information.
+
+---
+
 ## Advanced Optimization
 
 SDG Nexus provides advanced optimization features for high-throughput LLM inference workloads. These features are particularly useful when working with vLLM or SGLang backends.

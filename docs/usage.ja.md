@@ -539,6 +539,52 @@ for b in cfg.blocks:
 
 ---
 
+## Reasoning出力機能
+
+SDGは、LLMモデルの思考プロセス（Reasoning）を出力に含めることができます。この機能により、モデルがどのように問題を解決したかを確認できます。
+
+### 基本的な使用方法
+
+MABEL YAMLの`models`セクションでReasoning機能を有効化します：
+
+```yaml
+models:
+  - name: reasoning_model
+    api_model: openai/gpt-oss-120b
+    api_key: "${ENV.OPENROUTER_API_KEY}"
+    base_url: https://openrouter.ai/api
+    include_reasoning: true        # Reasoning出力を有効化
+    reasoning_effort: low          # Effortレベル: low/medium/high
+    request_defaults:
+      temperature: 0.7
+      max_tokens: 8192
+```
+
+### 出力フォーマット
+
+Reasoningが有効な場合、AIブロックの出力は`<think></think>`タグで囲まれた思考プロセスと回答が含まれます：
+
+```
+<think>
+[モデルの思考プロセス]
+</think>
+[実際の回答]
+```
+
+### 使用例
+
+```bash
+# Reasoning機能を使用したパイプライン実行
+sdg run \
+  --yaml examples/reasoning_demo.yaml \
+  --input data.jsonl \
+  --output result.jsonl
+```
+
+**詳細なドキュメント**: [Reasoning出力機能ガイド](features/reasoning_output.md)を参照してください。
+
+---
+
 ## 高度な最適化機能
 
 SDG Nexusは、高スループットのLLM推論ワークロードのための高度な最適化機能を提供します。これらの機能は、vLLMやSGLangバックエンドを使用する際に特に有効です。

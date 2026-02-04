@@ -77,6 +77,8 @@ class ModelDef:
     request_defaults: Dict[str, Any] = field(default_factory=dict)
     capabilities: List[str] = field(default_factory=list)  # v2
     safety: Dict[str, Any] = field(default_factory=dict)  # v2
+    include_reasoning: bool = None  # v2: Reasoning出力を有効化
+    reasoning_effort: Optional[str] = None  # v2: Reasoning effort (low/medium/high)
 
 
 @dataclass

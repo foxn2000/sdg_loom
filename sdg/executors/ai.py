@@ -201,6 +201,17 @@ async def _execute_ai_block_single(
     if block.mode == "json":
         req_params["response_format"] = {"type": "json_object"}
 
+    # v2: Reasoningモード
+    # OpenRouter等のプロバイダーで include_reasoning をサポート
+    # OpenAI SDKが認識しないパラメータは extra_body に含める
+    if model_def.include_reasoning:
+        # extra_bodyがない場合は初期化
+        if "extra_body" not in req_params:
+            req_params["extra_body"] = {}
+        req_params["extra_body"]["include_reasoning"] = True
+        if model_def.reasoning_effort:
+            req_params["extra_body"]["reasoning"] = {"effort": model_def.reasoning_effort}
+
     # 単一チャット呼び出し
     retry_cfg = dict(req_params.get("retry") or {})
     # 最適化オプションからretry_on_empty設定を取得
@@ -223,7 +234,11 @@ async def _execute_ai_block_single(
     if result.error:
         raise result.error
 
+    # Reasoningがある場合は<think>タグで囲んで出力に含める
     text = result.content or ""
+    if result.reasoning:
+        text = f"<think>{result.reasoning}</think>\n{text}"
+
     out_map = _apply_outputs(
         text,
         block.outputs or [OutputDef(name="full", select="full")],
