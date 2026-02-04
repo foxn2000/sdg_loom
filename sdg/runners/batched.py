@@ -356,9 +356,13 @@ def run_streaming_adaptive_batched(
         else:
             raise ValueError("Unsupported input format. Use .jsonl or .csv")
     elif dataset_name:
-        ds = read_hf_dataset(dataset_name, subset, split, max_inputs=max_inputs, skip_lines=actual_skip)
+        ds = read_hf_dataset(
+            dataset_name, subset, split, max_inputs=max_inputs, skip_lines=actual_skip
+        )
         # HF Datasetの場合は総数が不明（streaming=True）
         total = max_inputs  # max_inputsが指定されていればそれを使用
+        if total is not None and actual_skip > 0:
+            total = max(0, total - actual_skip)
     else:
         raise ValueError("Either input_path or dataset_name must be provided")
 
