@@ -77,8 +77,12 @@ class ModelDef:
     request_defaults: Dict[str, Any] = field(default_factory=dict)
     capabilities: List[str] = field(default_factory=list)  # v2
     safety: Dict[str, Any] = field(default_factory=dict)  # v2
-    include_reasoning: bool = None  # v2: Reasoning出力を有効化
-    reasoning_effort: Optional[str] = None  # v2: Reasoning effort (low/medium/high)
+    # Reasoning関連設定
+    enable_reasoning: bool = False  # v2: Reasoning機能を有効化するか（デフォルト: False）
+    reasoning_effort: Optional[str] = None  # v2: Reasoning effort (low/medium/high/xhigh)
+    reasoning_max_tokens: Optional[int] = None  # v2: Reasoning最大トークン数（OpenRouter Anthropic-style）
+    include_reasoning: bool = True  # v2: ReasoningをレスポンスDATAに含めるか（デフォルト: True）
+    exclude_reasoning: bool = False  # v2: Reasoningを内部で使うがレスポンスには含めない（デフォルト: False）
 
 
 @dataclass

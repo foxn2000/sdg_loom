@@ -202,15 +202,58 @@ async def _execute_ai_block_single(
         req_params["response_format"] = {"type": "json_object"}
 
     # v2: Reasoningモード
-    # OpenRouter等のプロバイダーで include_reasoning をサポート
-    # OpenAI SDKが認識しないパラメータは extra_body に含める
-    if model_def.include_reasoning:
-        # extra_bodyがない場合は初期化
-        if "extra_body" not in req_params:
-            req_params["extra_body"] = {}
-        req_params["extra_body"]["include_reasoning"] = True
-        if model_def.reasoning_effort:
-            req_params["extra_body"]["reasoning"] = {"effort": model_def.reasoning_effort}
+    # OpenRouter: reasoning.enabled, reasoning.effort, reasoning.exclude, reasoning.max_tokens
+    # OpenAI: reasoning_effort (o1/o3/GPT-5系)
+    # デフォルトはFalseで、modelsブロックで明示的に有効化する必要がある
+    if model_def.enable_reasoning:
+        # base_urlでプロバイダーを判定
+        is_openrouter = "openrouter.ai" in (model_def.base_url or "").lower()
+        is_openai = not model_def.base_url or "api.openai.com" in (
+            model_def.base_url or ""
+        ).lower()
+
+        if is_openrouter:
+            # OpenRouter形式: extra_body.reasoning オブジェクト
+            if "extra_body" not in req_params:
+                req_params["extra_body"] = {}
+
+            reasoning_config = {"enabled": True}
+
+            # Reasoning effort レベル設定
+            if model_def.reasoning_effort:
+                reasoning_config["effort"] = model_def.reasoning_effort
+
+            # Reasoning最大トークン数
+            if model_def.reasoning_max_tokens:
+                reasoning_config["max_tokens"] = model_def.reasoning_max_tokens
+
+            # レスポンスにReasoningを含めない場合（内部利用のみ）
+            if model_def.exclude_reasoning:
+                reasoning_config["exclude"] = True
+
+            req_params["extra_body"]["reasoning"] = reasoning_config
+
+        elif is_openai:
+            # OpenAI形式: reasoning_effortをトップレベルに設定（o1/o3/GPT-5系）
+            if model_def.reasoning_effort:
+                req_params["reasoning_effort"] = model_def.reasoning_effort
+        else:
+            # その他のプロバイダー: OpenRouter形式を試行
+            if "extra_body" not in req_params:
+                req_params["extra_body"] = {}
+
+            reasoning_config = {"enabled": True}
+
+            if model_def.reasoning_effort:
+                reasoning_config["effort"] = model_def.reasoning_effort
+
+            if model_def.reasoning_max_tokens:
+                reasoning_config["max_tokens"] = model_def.reasoning_max_tokens
+
+            if model_def.exclude_reasoning:
+                reasoning_config["exclude"] = True
+
+            req_params["extra_body"]["reasoning"] = reasoning_config
 
     # 単一チャット呼び出し
     retry_cfg = dict(req_params.get("retry") or {})
@@ -235,8 +278,14 @@ async def _execute_ai_block_single(
         raise result.error
 
     # Reasoningがある場合は<think>タグで囲んで出力に含める
+    # ただし、enable_reasoningが有効で、かつinclude_reasoningがTrueの場合のみ
     text = result.content or ""
-    if result.reasoning:
+    if (
+        model_def.enable_reasoning
+        and model_def.include_reasoning
+        and not model_def.exclude_reasoning
+        and result.reasoning
+    ):
         text = f"<think>{result.reasoning}</think>\n{text}"
 
     out_map = _apply_outputs(

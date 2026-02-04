@@ -552,12 +552,66 @@ models:
   - name: reasoning_model
     api_model: openai/gpt-oss-120b
     api_key: "${ENV.OPENROUTER_API_KEY}"
-    base_url: https://openrouter.ai/api
-    include_reasoning: true        # Enable reasoning output
-    reasoning_effort: low          # Effort level: low/medium/high
+    base_url: https://openrouter.ai/api/v1
+    enable_reasoning: true         # Enable reasoning feature (required)
+    include_reasoning: true        # Include reasoning in response
+    reasoning_effort: low          # Effort level: low/medium/high/xhigh/minimal
+    exclude_reasoning: false       # Do not exclude reasoning
     request_defaults:
       temperature: 0.7
       max_tokens: 8192
+```
+
+### Configuration Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `enable_reasoning` | `false` | Enable reasoning feature (**required**: without this, reasoning won't work) |
+| `include_reasoning` | `true` | Include reasoning in output |
+| `exclude_reasoning` | `false` | Exclude reasoning from output (internal use only) |
+| `reasoning_effort` | - | Reasoning level (`low`, `medium`, `high`, `xhigh`, `minimal`) |
+| `reasoning_max_tokens` | - | Maximum tokens for reasoning (optional) |
+
+**Important**:
+- Without **`enable_reasoning: true`**, all other reasoning-related settings are ignored
+- `include_reasoning` and `exclude_reasoning` are conflicting settings. Normally use `include_reasoning: true`
+
+### Provider-Specific Support
+
+SDG automatically selects the appropriate reasoning format based on the API provider's base URL:
+
+#### OpenRouter (Recommended)
+```yaml
+base_url: https://openrouter.ai/api/v1
+enable_reasoning: true
+reasoning_effort: high
+```
+
+OpenRouter format sent to API:
+```json
+{
+  "extra_body": {
+    "reasoning": {
+      "enabled": true,
+      "effort": "high",
+      "exclude": false
+    }
+  }
+}
+```
+
+#### OpenAI (o1/o3/GPT-5 series)
+```yaml
+base_url: https://api.openai.com/v1
+enable_reasoning: true
+reasoning_effort: medium
+```
+
+OpenAI format sent to API:
+```json
+{
+  "reasoning_effort": "medium"
+}
 ```
 
 ### Output Format
@@ -566,9 +620,11 @@ When Reasoning is enabled, AI block outputs include the thinking process wrapped
 
 ```
 <think>
-[Model's thinking process]
+First, let me analyze the problem...
+Next, I'll consider solutions...
+The final answer is...
 </think>
-[Actual response]
+[Actual response text]
 ```
 
 ### Example Usage
@@ -581,7 +637,15 @@ sdg run \
   --output result.jsonl
 ```
 
-**Detailed Documentation**: See the [Reasoning Output Feature Guide](features/reasoning_output.md) for more information.
+### Troubleshooting
+
+**Error: "Only one of 'reasoning' and 'reasoning_effort' may be provided"**
+- This occurs when both formats are sent to OpenRouter simultaneously
+- Fix: SDG automatically detects the provider, but verify your `base_url` is correct if issues persist
+
+**Reasoning not included in output**
+- **Most common cause**: `enable_reasoning: true` is not set
+- `include_reasoning: true` alone is insufficient. You must set `enable_reasoning: true`
 
 ---
 
