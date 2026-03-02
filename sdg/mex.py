@@ -1,20 +1,24 @@
 """
 MABEL Expression Language (MEX) - v2 式エンジン
 """
+
 from __future__ import annotations
 import re, random, json
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
+
 class MEXEvaluator:
     """MEX式を評価するエンジン"""
-    
-    def __init__(self, context: Dict[str, Any], globals_vars: Optional[Dict[str, Any]] = None):
+
+    def __init__(
+        self, context: Dict[str, Any], globals_vars: Optional[Dict[str, Any]] = None
+    ):
         self.context = context  # ローカル変数（出力値など）
         self.globals_vars = globals_vars or {}  # グローバル変数
         self.call_stack_depth = 0
         self.max_depth = 256
-    
+
     def eval(self, expr: Any) -> Any:
         """式を評価"""
         if expr is None:
@@ -25,15 +29,15 @@ class MEXEvaluator:
             return [self.eval(e) for e in expr]
         if not isinstance(expr, dict):
             return expr
-        
+
         # 単一キーの演算子式
         if len(expr) == 1:
             op, args = next(iter(expr.items()))
             return self._eval_op(op, args)
-        
+
         # 複数キー（オブジェクトリテラル）
         return {k: self.eval(v) for k, v in expr.items()}
-    
+
     def _eval_op(self, op: str, args: Any) -> Any:
         """演算子を評価"""
         # 論理演算
@@ -43,7 +47,7 @@ class MEXEvaluator:
             return any(self._truthy(self.eval(a)) for a in args)
         if op == "not":
             return not self._truthy(self.eval(args))
-        
+
         # 比較演算
         if op == "eq":
             a, b = args
@@ -63,7 +67,7 @@ class MEXEvaluator:
         if op == "ge":
             a, b = args
             return self._to_num(self.eval(a)) >= self._to_num(self.eval(b))
-        
+
         # 算術演算
         if op == "add":
             return sum(self._to_num(self.eval(a)) for a in args)
@@ -86,7 +90,7 @@ class MEXEvaluator:
             return self._to_num(self.eval(a)) ** self._to_num(self.eval(b))
         if op == "neg":
             return -self._to_num(self.eval(args))
-        
+
         # 文字列演算
         if op == "concat":
             return "".join(str(self.eval(a)) for a in args)
@@ -95,7 +99,9 @@ class MEXEvaluator:
             return str(self.eval(text)).split(str(self.eval(sep)))
         if op == "replace":
             text, old, new = args
-            return str(self.eval(text)).replace(str(self.eval(old)), str(self.eval(new)))
+            return str(self.eval(text)).replace(
+                str(self.eval(old)), str(self.eval(new))
+            )
         if op == "lower":
             return str(self.eval(args)).lower()
         if op == "upper":
@@ -104,21 +110,42 @@ class MEXEvaluator:
             return str(self.eval(args)).strip()
         if op == "len":
             val = self.eval(args)
-            return len(val) if hasattr(val, '__len__') else 0
-        
+            return len(val) if hasattr(val, "__len__") else 0
+
         # コレクション演算
         if op == "map":
-            lst, fn = args["list"], args["fn"]
+            lst = args["list"]
+            var_name = args.get("var", "item")
+            fn_expr = args["fn"]
             items = self.eval(lst)
             if not isinstance(items, list):
                 items = [items]
-            return [self.eval(fn) for item in items]
+            results = []
+            for item in items:
+                old_context = self.context
+                self.context = {**old_context, var_name: item}
+                try:
+                    results.append(self.eval(fn_expr))
+                finally:
+                    self.context = old_context
+            return results
         if op == "filter":
-            lst, fn = args["list"], args["fn"]
+            lst = args["list"]
+            var_name = args.get("var", "item")
+            fn_expr = args["fn"]
             items = self.eval(lst)
             if not isinstance(items, list):
                 items = [items]
-            return [item for item in items if self._truthy(self.eval(fn))]
+            results = []
+            for item in items:
+                old_context = self.context
+                self.context = {**old_context, var_name: item}
+                try:
+                    if self._truthy(self.eval(fn_expr)):
+                        results.append(item)
+                finally:
+                    self.context = old_context
+            return results
         if op == "any":
             return any(self._truthy(self.eval(a)) for a in args)
         if op == "all":
@@ -129,7 +156,11 @@ class MEXEvaluator:
                 seen = set()
                 result = []
                 for item in lst:
-                    key = json.dumps(item, sort_keys=True) if isinstance(item, dict) else item
+                    key = (
+                        json.dumps(item, sort_keys=True)
+                        if isinstance(item, dict)
+                        else item
+                    )
                     if key not in seen:
                         seen.add(key)
                         result.append(item)
@@ -142,8 +173,8 @@ class MEXEvaluator:
             lst, start = args["list"], args.get("start", 0)
             end = args.get("end")
             items = self.eval(lst)
-            return items[self.eval(start):self.eval(end) if end is not None else None]
-        
+            return items[self.eval(start) : self.eval(end) if end is not None else None]
+
         # 正規表現
         if op == "regex_match":
             text, pattern = args["text"], args["pattern"]
@@ -154,14 +185,20 @@ class MEXEvaluator:
             return matches
         if op == "regex_replace":
             text, pattern, repl = args["text"], args["pattern"], args["replacement"]
-            return re.sub(str(self.eval(pattern)), str(self.eval(repl)), str(self.eval(text)))
-        
+            return re.sub(
+                str(self.eval(pattern)), str(self.eval(repl)), str(self.eval(text))
+            )
+
         # 制御構造
         if op == "if":
             cond = args["cond"]
             then_val = args["then"]
             else_val = args.get("else")
-            return self.eval(then_val) if self._truthy(self.eval(cond)) else self.eval(else_val)
+            return (
+                self.eval(then_val)
+                if self._truthy(self.eval(cond))
+                else self.eval(else_val)
+            )
         if op == "case":
             for when_clause in args.get("when", []):
                 cond = when_clause.get("cond")
@@ -169,7 +206,7 @@ class MEXEvaluator:
                 if self._truthy(self.eval(cond)):
                     return self.eval(then_val)
             return self.eval(args.get("else"))
-        
+
         # 変数参照
         if op == "var":
             name = str(args)
@@ -181,18 +218,22 @@ class MEXEvaluator:
             # 出力名参照（コンテキストのみ）
             return self.context.get(str(args))
         if op == "get":
-            obj = self.eval(args.get("obj") or args[0] if isinstance(args, list) else args)
-            path = str(self.eval(args.get("path") or args[1] if isinstance(args, list) else ""))
+            obj = self.eval(
+                args.get("obj") or args[0] if isinstance(args, list) else args
+            )
+            path = str(
+                self.eval(args.get("path") or args[1] if isinstance(args, list) else "")
+            )
             default = self.eval(args.get("default")) if isinstance(args, dict) else None
             return self._get_path(obj, path, default)
-        
+
         # 代入
         if op == "set":
             var_name = str(args["var"])
             value = self.eval(args["value"])
             self.globals_vars[var_name] = value
             return value
-        
+
         # 時間・乱数
         if op == "now":
             return datetime.now().isoformat()
@@ -200,7 +241,7 @@ class MEXEvaluator:
             low = self.eval(args.get("min", 0))
             high = self.eval(args.get("max", 1))
             return random.uniform(low, high)
-        
+
         # 型変換
         if op == "to_number":
             try:
@@ -215,10 +256,10 @@ class MEXEvaluator:
             return json.loads(str(self.eval(args)))
         if op == "stringify":
             return json.dumps(self.eval(args), ensure_ascii=False)
-        
+
         # 未知の演算子
         raise ValueError(f"Unknown MEX operator: {op}")
-    
+
     def _truthy(self, v: Any) -> bool:
         """真偽値判定"""
         if v is None or v is False:
@@ -226,7 +267,7 @@ class MEXEvaluator:
         if v == "" or v == 0 or v == [] or v == {}:
             return False
         return True
-    
+
     def _to_num(self, v: Any) -> float:
         """数値変換"""
         if isinstance(v, (int, float)):
@@ -237,15 +278,15 @@ class MEXEvaluator:
             except:
                 return 0.0
         return 0.0
-    
+
     def _get_path(self, obj: Any, path: str, default: Any = None) -> Any:
         """パス指定で値を取得（a.b[0].c 形式）"""
         if not path:
             return obj
-        
-        parts = re.split(r'\.|\[|\]', path)
+
+        parts = re.split(r"\.|\[|\]", path)
         parts = [p for p in parts if p]
-        
+
         current = obj
         for part in parts:
             if isinstance(current, dict):
@@ -258,14 +299,16 @@ class MEXEvaluator:
                     current = default
             else:
                 current = default
-            
+
             if current is None:
                 return default
-        
+
         return current if current is not None else default
 
 
-def eval_mex(expr: Any, context: Dict[str, Any], globals_vars: Optional[Dict[str, Any]] = None) -> Any:
+def eval_mex(
+    expr: Any, context: Dict[str, Any], globals_vars: Optional[Dict[str, Any]] = None
+) -> Any:
     """MEX式を評価するヘルパー関数"""
     evaluator = MEXEvaluator(context, globals_vars)
     return evaluator.eval(expr)

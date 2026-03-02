@@ -42,7 +42,7 @@ sdg run --yaml examples/sdg_demo.yaml --dataset squad --split validation --outpu
 
 ### Test Run Command
 
-The [`test-run`](../sdg/cli.py:469) command allows you to quickly verify your YAML blueprint by processing only the first data item with detailed logging enabled by default.
+The [`test-run`](../sdg/cli.py:508) command allows you to quickly verify your YAML blueprint by processing only the first data item with detailed logging enabled by default.
 
 **Basic Usage:**
 
@@ -58,6 +58,12 @@ sdg test-run --yaml examples/sdg_demo.yaml --dataset squad --split validation
 
 # Test with Japanese UI
 sdg test-run --yaml examples/sdg_demo.yaml --input data.jsonl --ui-locale ja
+
+# Randomly select one item from the first 100 rows
+sdg test-run --yaml examples/sdg_demo.yaml --input data.jsonl --random-input
+
+# Show meta information (elapsed time, row index) in the result
+sdg test-run --yaml examples/sdg_demo.yaml --input data.jsonl --meta
 ```
 
 **Options:**
@@ -73,6 +79,8 @@ sdg test-run --yaml examples/sdg_demo.yaml --input data.jsonl --ui-locale ja
 | `--ui-locale {en,ja}` | UI locale for log output (default: en) |
 | `--verbose`, `-v` | Enable verbose logging (default: enabled) |
 | `--no-verbose` | Disable verbose logging |
+| `--random-input` | Randomly select one item from the first 100 data items |
+| `--meta` | Show meta information in final result (elapsed time, row index, etc.) |
 
 **Features:**
 
@@ -80,6 +88,8 @@ sdg test-run --yaml examples/sdg_demo.yaml --input data.jsonl --ui-locale ja
 - Verbose logging enabled by default (can be disabled with `--no-verbose`)
 - Outputs detailed execution logs and final result as JSON
 - Supports both local files (JSONL/CSV) and Hugging Face datasets
+- `--random-input` selects a random item from the first 100 rows (useful for varied testing)
+- `--meta` appends execution metadata (elapsed time, row index) to the result output
 - Useful for debugging and validating YAML blueprints before full runs
 
 **Example Output:**
@@ -403,6 +413,43 @@ sdg --yaml pipeline.yaml --input data.jsonl --output result.jsonl
 
 ### Basic Usage
 
+**Recommended: `PipelineEngine` API**
+
+The [`PipelineEngine`](../sdg/pipeline/engine.py:41) is the unified execution engine that consolidates all pipeline execution paths. Use it with [`RunConfig`](../sdg/pipeline/run_config.py:96) for full control:
+
+```python
+from sdg.config import load_config
+from sdg.runner import (
+    PipelineEngine,
+    RunConfig,
+    ConcurrencyConfig,
+    DataSourceConfig,
+)
+
+cfg = load_config("examples/sdg_demo.yaml")
+run_config = RunConfig(
+    concurrency=ConcurrencyConfig(max_concurrent=8),
+    data_source=DataSourceConfig(input_path="examples/data/input.jsonl"),
+)
+engine = PipelineEngine(cfg, run_config)
+engine.run("output/result.jsonl")
+```
+
+**Simple helper API (`run_streaming`):**
+
+```python
+from sdg.runner import run_streaming
+
+run_streaming(
+    yaml_path="examples/sdg_demo.yaml",
+    input_path="examples/data/input.jsonl",
+    output_path="output/result.jsonl",
+    max_concurrent=8,
+)
+```
+
+**Legacy in-memory batch API (`run_pipeline`):**
+
 ```python
 import asyncio
 from sdg.config import load_config
@@ -418,15 +465,8 @@ async def main():
         {"UserInput": "Explain machine learning"},
     ]
     
-    # 3. Execute pipeline
-    results = await run_pipeline(
-        cfg,
-        dataset,
-        max_batch=4,
-        min_batch=1,
-        target_latency_ms=3000,
-        save_intermediate=False,
-    )
+    # 3. Execute pipeline (returns list of result dicts)
+    results = await run_pipeline(cfg, dataset)
     
     # 4. Process results
     for result in results:

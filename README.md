@@ -193,39 +193,46 @@ sdg run \
   --ui-locale ja
 ```
 
-Execution with custom batch settings:
+Execution with adaptive concurrency and custom batch settings:
 
 ```bash
 sdg run \
   --yaml examples/sdg_demo_v2.yaml \
   --input data.jsonl \
   --output result.jsonl \
+  --adaptive \
   --max-batch 16 \
   --min-batch 2 \
-  --target-latency 2000
+  --target-latency-ms 2000
 ```
 
 ### Using Python API
 
+**Simple streaming execution (recommended):**
+
+```python
+from sdg.runner import run_streaming
+
+run_streaming(
+    yaml_path="pipeline.yaml",
+    input_path="data/input.jsonl",
+    output_path="output/result.jsonl",
+    max_concurrent=8,
+)
+```
+
+**Full control with `PipelineEngine`:**
+
 ```python
 from sdg.config import load_config
-from sdg.executors import run_pipeline
-import asyncio
+from sdg.runner import PipelineEngine, RunConfig, ConcurrencyConfig
 
-# Load configuration
 cfg = load_config("pipeline.yaml")
-
-# Prepare dataset
-dataset = [
-    {"UserInput": "What is AI?"},
-    {"UserInput": "Explain machine learning"}
-]
-
-# Run pipeline asynchronously
-results = asyncio.run(run_pipeline(cfg, dataset))
-
-for result in results:
-    print(result)
+run_config = RunConfig(
+    concurrency=ConcurrencyConfig(max_concurrent=8),
+)
+engine = PipelineEngine(cfg, run_config)
+engine.run("output/result.jsonl")
 ```
 
 ---

@@ -3,9 +3,6 @@ import argparse
 import sys
 from .runner import (
     run,
-    run_streaming,
-    run_streaming_adaptive,
-    run_streaming_adaptive_batched,
     test_run,
 )
 
@@ -105,10 +102,6 @@ Phase 2 最適化オプション:
 
 LLMリトライオプション:
   --no-retry-on-empty     空返答時のリトライを無効化（デフォルトは有効）
-
-JSONL出力クリーニングオプション:
-  --disable-output-cleaning
-                          出力JSONLのクリーニングを無効化（デフォルトは有効）
 
 プロファイルオプション:
   --profile               生成後プロファイリングを有効化（言語分布、長さ分布、重複検出等）
@@ -258,8 +251,6 @@ SDG (Scalable Data Generator) CLI [レガシーモード: sdg --yaml ...]
   --memory-threshold-mb MEMORY_THRESHOLD_MB
                         メモリ使用量警告閾値（MB、デフォルト: 1024）
   --no-retry-on-empty   空返答時のリトライを無効化（デフォルトは有効）
-  --disable-output-cleaning
-                        出力JSONLのクリーニングを無効化（デフォルトは有効）
   --use-shared-transport
                         共有HTTPトランスポートを使用（コネクションプール共有）
   --no-http2            HTTP/2を無効化（デフォルトは有効）
@@ -465,13 +456,6 @@ def build_run_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
         help="Disable retry on empty response (enabled by default)",
     )
 
-    # JSONL cleaning options
-    p.add_argument(
-        "--disable-output-cleaning",
-        action="store_true",
-        help="Disable output JSONL cleaning (enabled by default)",
-    )
-
     # Profile options
     p.add_argument(
         "--profile",
@@ -638,10 +622,105 @@ def _execute_test_run(args):
         sys.exit(1)
 
 
+def _build_run_config(args) -> "RunConfig":
+    """argparse の Namespace から RunConfig を構築"""
+    from .pipeline.run_config import (
+        RunConfig,
+        ConcurrencyConfig,
+        IOConfig,
+        ResumeConfig,
+        MemoryConfig,
+        ProfileConfig,
+        TransportConfig,
+        DataSourceConfig,
+    )
+
+    # mapping解析
+    mapping = {}
+    if getattr(args, "mapping", None):
+        for m in args.mapping:
+            if ":" in m:
+                k, v = m.split(":", 1)
+                mapping[k] = v
+
+    # max_concurrent の解決（レガシーオプション考慮）
+    max_concurrent = getattr(args, "max_concurrent_rows", None) or getattr(
+        args, "max_concurrent", 8
+    )
+    min_concurrent = getattr(args, "min_concurrent", None) or getattr(
+        args, "min_batch", 1
+    )
+
+    # metrics_type の決定
+    metrics_type = "none"
+    if getattr(args, "use_vllm_metrics", False):
+        metrics_type = "vllm"
+    elif getattr(args, "use_sglang_metrics", False):
+        metrics_type = "sglang"
+
+    return RunConfig(
+        concurrency=ConcurrencyConfig(
+            max_concurrent=max_concurrent,
+            adaptive=getattr(args, "adaptive", False),
+            min_concurrent=min_concurrent,
+            max_concurrent_limit=getattr(args, "max_batch", 64),
+            target_latency_ms=getattr(args, "target_latency_ms", 3000),
+            target_queue_depth=getattr(args, "target_queue_depth", 32),
+            metrics_type=metrics_type,
+            enable_request_batching=getattr(args, "enable_request_batching", False),
+            max_batch_size=getattr(args, "max_batch_size", 32),
+            max_wait_ms=getattr(args, "max_wait_ms", 50),
+        ),
+        io=IOConfig(),
+        resume=ResumeConfig(
+            resume=getattr(args, "resume", False),
+            skip_lines=getattr(args, "skip_lines", 0),
+            max_inputs=getattr(args, "max_inputs", None),
+        ),
+        memory=MemoryConfig(
+            enable_scheduling=getattr(args, "enable_scheduling", False),
+            max_pending_tasks=getattr(args, "max_pending_tasks", 1000),
+            chunk_size=getattr(args, "chunk_size", 100),
+            enable_memory_optimization=getattr(
+                args, "enable_memory_optimization", False
+            ),
+            max_cache_size=getattr(args, "max_cache_size", 500),
+            enable_memory_monitoring=getattr(args, "enable_memory_monitoring", False),
+            gc_interval=getattr(args, "gc_interval", 100),
+            memory_threshold_mb=getattr(args, "memory_threshold_mb", 1024),
+        ),
+        profile=ProfileConfig(
+            enable=getattr(args, "profile", False),
+            output_path=getattr(args, "profile_output", None),
+            output_fields=(
+                args.profile_fields.split(",")
+                if getattr(args, "profile_fields", None)
+                else None
+            ),
+        ),
+        transport=TransportConfig(
+            use_shared_transport=getattr(args, "use_shared_transport", False),
+            http2=not getattr(args, "no_http2", False),
+            retry_on_empty=not getattr(args, "no_retry_on_empty", False),
+        ),
+        data_source=DataSourceConfig(
+            input_path=getattr(args, "input", None),
+            dataset_name=getattr(args, "dataset", None),
+            subset=getattr(args, "subset", None),
+            split=getattr(args, "split", "train"),
+            mapping=mapping if mapping else None,
+        ),
+        save_intermediate=getattr(args, "save_intermediate", False),
+        show_progress=not getattr(args, "no_progress", False),
+        verbose=getattr(args, "verbose", False),
+    )
+
+
 def _execute_run(args):
     """Execute the run command based on args"""
-    # Initialize logger
     from .logger import init_logger
+    from .config import load_config
+    from .pipeline import PipelineEngine
 
     # Get locale from --ui-locale parameter
     locale = getattr(args, "ui_locale", "en")
@@ -659,48 +738,24 @@ def _execute_run(args):
     if args.input and args.dataset:
         logger.error("Cannot specify both --input and --dataset.")
         sys.exit(1)
-
-    # Validate max_inputs
-    if args.max_inputs is not None:
-        if args.max_inputs <= 0:
-            logger.error("--max-inputs must be a positive integer.")
-            sys.exit(1)
-
-    # Validate skip_lines
+    if args.max_inputs is not None and args.max_inputs <= 0:
+        logger.error("--max-inputs must be a positive integer.")
+        sys.exit(1)
     if args.skip_lines < 0:
         logger.error("--skip must be a non-negative integer.")
         sys.exit(1)
-
-    # Validate resume and skip_lines conflict
     if args.resume and args.skip_lines > 0:
         logger.error("Cannot use both --resume and --skip at the same time.")
         sys.exit(1)
 
-    # Parse mapping
-    mapping = {}
-    if args.mapping:
-        for m in args.mapping:
-            if ":" not in m:
-                print(
-                    f"Error: Invalid mapping format '{m}'. Expected 'orig:new'.",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-            k, v = m.split(":", 1)
-            mapping[k] = v
-
-    # Resolve legacy option aliases
-    max_concurrent = (
-        args.max_concurrent_rows
-        if args.max_concurrent_rows is not None
-        else args.max_concurrent
-    )
-    min_concurrent = (
-        args.min_concurrent if args.min_concurrent is not None else args.min_batch
-    )
-
-    # Legacy batch mode (hidden, for backward compatibility)
-    if args.batch_mode:
+    # Legacy batch mode (backward compatibility のため維持)
+    if getattr(args, "batch_mode", False):
+        mapping = {}
+        if args.mapping:
+            for m in args.mapping:
+                if ":" in m:
+                    k, v = m.split(":", 1)
+                    mapping[k] = v
         run(
             args.yaml,
             args.input,
@@ -713,145 +768,19 @@ def _execute_run(args):
             dataset_name=args.dataset,
             subset=args.subset,
             split=args.split,
-            mapping=mapping,
+            mapping=mapping if mapping else None,
         )
-    elif args.adaptive:
-        # Adaptive streaming mode: dynamic concurrency control
-        # Determine metrics type
-        metrics_type = "none"
-        if args.use_vllm_metrics:
-            metrics_type = "vllm"
-        elif args.use_sglang_metrics:
-            metrics_type = "sglang"
+        return
 
-        if args.enable_request_batching:
-            # Use batched adaptive mode
-            run_streaming_adaptive_batched(
-                args.yaml,
-                args.input,
-                args.output,
-                max_concurrent=args.max_batch,
-                min_concurrent=min_concurrent,
-                target_latency_ms=args.target_latency_ms,
-                target_queue_depth=args.target_queue_depth,
-                metrics_type=metrics_type,
-                max_batch_size=args.max_batch_size,
-                max_wait_ms=args.max_wait_ms,
-                save_intermediate=args.save_intermediate,
-                show_progress=not args.no_progress,
-                use_shared_transport=args.use_shared_transport,
-                http2=not args.no_http2,
-                # LLM retry options
-                retry_on_empty=not args.no_retry_on_empty,
-                # JSONL cleaning options
-                clean_output=not args.disable_output_cleaning,
-                # Phase 2: Scheduling options
-                enable_scheduling=args.enable_scheduling,
-                max_pending_tasks=args.max_pending_tasks,
-                chunk_size=args.chunk_size,
-                # Phase 2: Memory optimization options
-                enable_memory_optimization=args.enable_memory_optimization,
-                max_cache_size=args.max_cache_size,
-                enable_memory_monitoring=args.enable_memory_monitoring,
-                # Data limit options
-                max_inputs=args.max_inputs,
-                skip_lines=args.skip_lines,
-                resume=args.resume,
-                # HF Dataset options
-                dataset_name=args.dataset,
-                subset=args.subset,
-                split=args.split,
-                mapping=mapping,
-                # Profile options
-                enable_profile=args.profile,
-                profile_output_path=args.profile_output,
-                profile_output_fields=(
-                    args.profile_fields.split(",") if args.profile_fields else None
-                ),
-            )
-        else:
-            run_streaming_adaptive(
-                args.yaml,
-                args.input,
-                args.output,
-                max_concurrent=args.max_batch,
-                min_concurrent=min_concurrent,
-                target_latency_ms=args.target_latency_ms,
-                target_queue_depth=args.target_queue_depth,
-                metrics_type=metrics_type,
-                save_intermediate=args.save_intermediate,
-                show_progress=not args.no_progress,
-                use_shared_transport=args.use_shared_transport,
-                http2=not args.no_http2,
-                # LLM retry options
-                retry_on_empty=not args.no_retry_on_empty,
-                # JSONL cleaning options
-                clean_output=not args.disable_output_cleaning,
-                # Phase 2: Scheduling options
-                enable_scheduling=args.enable_scheduling,
-                max_pending_tasks=args.max_pending_tasks,
-                chunk_size=args.chunk_size,
-                # Phase 2: Memory optimization options
-                enable_memory_optimization=args.enable_memory_optimization,
-                max_cache_size=args.max_cache_size,
-                enable_memory_monitoring=args.enable_memory_monitoring,
-                # Data limit options
-                max_inputs=args.max_inputs,
-                skip_lines=args.skip_lines,
-                resume=args.resume,
-                # HF Dataset options
-                dataset_name=args.dataset,
-                subset=args.subset,
-                split=args.split,
-                mapping=mapping,
-                # Profile options
-                enable_profile=args.profile,
-                profile_output_path=args.profile_output,
-                profile_output_fields=(
-                    args.profile_fields.split(",") if args.profile_fields else None
-                ),
-            )
-    else:
-        # Streaming mode: row-by-row processing with fixed concurrency (default)
-        run_streaming(
-            args.yaml,
-            args.input,
-            args.output,
-            max_concurrent=max_concurrent,
-            save_intermediate=args.save_intermediate,
-            show_progress=not args.no_progress,
-            use_shared_transport=args.use_shared_transport,
-            http2=not args.no_http2,
-            # LLM retry options
-            retry_on_empty=not args.no_retry_on_empty,
-            # JSONL cleaning options
-            clean_output=not args.disable_output_cleaning,
-            # Phase 2: Scheduling options
-            enable_scheduling=args.enable_scheduling,
-            max_pending_tasks=args.max_pending_tasks,
-            chunk_size=args.chunk_size,
-            # Phase 2: Memory optimization options
-            enable_memory_optimization=args.enable_memory_optimization,
-            max_cache_size=args.max_cache_size,
-            enable_memory_monitoring=args.enable_memory_monitoring,
-            gc_interval=args.gc_interval,
-            memory_threshold_mb=args.memory_threshold_mb,
-            # Data limit options
-            max_inputs=args.max_inputs,
-            skip_lines=args.skip_lines,
-            resume=args.resume,
-            # HF Dataset options
-            dataset_name=args.dataset,
-            subset=args.subset,
-            split=args.split,
-            mapping=mapping,
-            # Profile options
-            enable_profile=args.profile,
-            profile_output_path=args.profile_output,
-            profile_output_fields=(
-                args.profile_fields.split(",") if args.profile_fields else None
-            ),
-        )
+    # RunConfig-based execution (新方式)
+    try:
+        cfg = load_config(args.yaml)
+        run_config = _build_run_config(args)
+        engine = PipelineEngine(cfg, run_config)
+        engine.run(args.output)
+    except Exception as e:
+        logger.error(f"Pipeline execution failed: {e}")
+        sys.exit(1)
 
 
 def main():

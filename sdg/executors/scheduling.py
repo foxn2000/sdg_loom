@@ -14,7 +14,7 @@ import sys
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Generic, Iterator, List, Optional, TypeVar
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 
 # psutilはオプション依存（メモリ監視用）
 try:
@@ -48,7 +48,7 @@ class SchedulerConfig:
 
 
 @dataclass
-class MemoryConfig:
+class SchedulingMemoryConfig:
     """
     メモリ効率化の設定
 
@@ -305,7 +305,7 @@ class LRUCache(Generic[T]):
         else:
             if len(self._cache) >= self._max_size:
                 # 最も古いアイテムを削除
-                oldest_key, evicted = self._cache.popitem(last=False)
+                _, evicted = self._cache.popitem(last=False)
 
         self._cache[key] = value
         return evicted
@@ -374,12 +374,12 @@ class StreamingContextManager:
         ```
     """
 
-    def __init__(self, config: Optional[MemoryConfig] = None):
+    def __init__(self, config: Optional[SchedulingMemoryConfig] = None):
         """
         Args:
             config: メモリ効率化設定（Noneの場合はデフォルト設定を使用）
         """
-        self.config = config or MemoryConfig()
+        self.config = config or SchedulingMemoryConfig()
         # LRUCacheの代わりにアクティブなコンテキストを保持する辞書を使用
         self._active_contexts: Dict[str, Dict[str, Any]] = {}
         self._completed: set = set()
@@ -612,7 +612,7 @@ class BatchProgressiveRelease:
 
     def __init__(
         self,
-        config: Optional[MemoryConfig] = None,
+        config: Optional[SchedulingMemoryConfig] = None,
         total_size: int = 0,
     ):
         """
@@ -620,7 +620,7 @@ class BatchProgressiveRelease:
             config: メモリ効率化設定
             total_size: データセットの総サイズ
         """
-        self.config = config or MemoryConfig()
+        self.config = config or SchedulingMemoryConfig()
         self.total_size = total_size
         self._completed_rows: set = set()
         self._gc_counter = 0

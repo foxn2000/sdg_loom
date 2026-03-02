@@ -44,9 +44,10 @@ For more details, refer to:
 
 To generate high-quality MABEL flows, we recommend using high-performance models such as:
 
-- **Claude 3.5 Sonnet** (recommended)
-- **GPT-4 Turbo / GPT-4o**
-- **Gemini 1.5 Pro**
+- **Claude Opus 4.5** (recommended)
+- **GPT-4o / o3**
+- **Gemini 2.0 Pro**
+- **Grok 3**
 - Other latest frontier models
 
 ### Required Knowledge
@@ -375,14 +376,23 @@ cat test_output.jsonl
 
 ### 3. Debug Mode
 
-If there are issues, enable detailed logging:
+If there are issues, use `test-run` to quickly debug with detailed logging (verbose by default):
 
 ```bash
-# Set log level with environment variable
-export PYTHONPATH=.
-python -m sdg run --yaml flows/yaml/your_flow.yaml \
-                  --input test_input.jsonl \
-                  --output test_output.jsonl
+# Quick debug with test-run (processes one item, verbose by default)
+sdg test-run --yaml flows/yaml/your_flow.yaml \
+             --input test_input.jsonl
+
+# Randomly select one item from the first 100 rows for varied testing
+sdg test-run --yaml flows/yaml/your_flow.yaml \
+             --input test_input.jsonl \
+             --random-input
+
+# Full run with verbose logging
+sdg run --yaml flows/yaml/your_flow.yaml \
+        --input test_input.jsonl \
+        --output test_output.jsonl \
+        --verbose
 ```
 
 ---

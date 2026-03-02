@@ -37,28 +37,33 @@ def run(
     # load data
     if input_path:
         if input_path.endswith(".jsonl"):
-            ds = read_jsonl(input_path, max_inputs=max_inputs)
+            ds = list(read_jsonl(input_path, max_inputs=max_inputs))
         elif input_path.endswith(".csv"):
-            ds = read_csv(input_path, max_inputs=max_inputs)
+            ds = list(read_csv(input_path, max_inputs=max_inputs))
         else:
             raise ValueError("Unsupported input format. Use .jsonl or .csv")
     elif dataset_name:
-        ds = read_hf_dataset(dataset_name, subset, split, max_inputs=max_inputs)
+        ds = list(read_hf_dataset(dataset_name, subset, split, max_inputs=max_inputs))
     else:
         raise ValueError("Either input_path or dataset_name must be provided")
 
     # Apply mapping
     if mapping:
-        ds = apply_mapping(ds, mapping)
+        ds = list(apply_mapping(ds, mapping))
 
     # Print dataset info
     logger = get_logger()
-    subtitle = "Legacy batch processing mode" if logger.locale == "en" else "レガシーバッチ処理モード"
+    subtitle = (
+        "Legacy batch processing mode"
+        if logger.locale == "en"
+        else "レガシーバッチ処理モード"
+    )
     logger.header("SDG Pipeline - Legacy Batch Mode", subtitle)
-    
+
     if logger.locale == "ja":
         config_info = {
-            "入力データ数": f"{len(ds)}" + (f" (--max-inputs {max_inputs}で制限)" if max_inputs else ""),
+            "入力データ数": f"{len(ds)}"
+            + (f" (--max-inputs {max_inputs}で制限)" if max_inputs else ""),
             "最大バッチ": max_batch,
             "最小バッチ": min_batch,
             "目標レイテンシ": f"{target_latency_ms}ms",
@@ -66,7 +71,8 @@ def run(
         logger.table("実行設定", config_info)
     else:
         config_info = {
-            "Input Data Count": f"{len(ds)}" + (f" (limited by --max-inputs {max_inputs})" if max_inputs else ""),
+            "Input Data Count": f"{len(ds)}"
+            + (f" (limited by --max-inputs {max_inputs})" if max_inputs else ""),
             "Max Batch": max_batch,
             "Min Batch": min_batch,
             "Target Latency": f"{target_latency_ms}ms",

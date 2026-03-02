@@ -17,7 +17,6 @@ from typing import (
     Optional,
     Set,
     Tuple,
-    Union,
 )
 
 import aiofiles
@@ -32,9 +31,6 @@ except ImportError:
     _HAS_ORJSON = False
 
 from .logger import get_logger
-
-# clean_jsonl_line is no longer used in AsyncBufferedWriter.write/write_many
-# since Dict input with json.dumps guarantees valid JSON format
 
 
 def load_processed_indices(output_path: str) -> Tuple[Set[int], int]:
@@ -83,28 +79,6 @@ def load_processed_indices(output_path: str) -> Tuple[Set[int], int]:
     return processed_indices, processed_count
 
 
-def skip_processed_rows(
-    dataset: Iterable[Dict[str, Any]],
-    processed_indices: Set[int],
-) -> Iterator[Tuple[int, Dict[str, Any]]]:
-    """
-    処理済み行をスキップしながらデータセットをイテレートする。
-
-    入力データセットの各行に対して、その行インデックスを付与しながら、
-    処理済み行をスキップして未処理行のみを yield する。
-
-    Args:
-        dataset: 入力データセット（辞書のイテラブル）
-        processed_indices: 処理済み行インデックスのセット
-
-    Yields:
-        (行インデックス, データ行) のタプル（未処理行のみ）
-    """
-    for row_index, row in enumerate(dataset):
-        if row_index not in processed_indices:
-            yield row_index, row
-
-
 class AsyncBufferedWriter:
     """
     非同期バッファリングファイルライター。
@@ -136,7 +110,6 @@ class AsyncBufferedWriter:
         max_retries: int = DEFAULT_MAX_RETRIES,
         encoding: str = "utf-8",
         serializer: Optional[Callable[[Dict[str, Any]], str]] = None,
-        clean_output: bool = True,
         append: bool = False,
     ):
         """
@@ -151,7 +124,6 @@ class AsyncBufferedWriter:
             max_retries: 書き込み失敗時の最大リトライ回数（デフォルト: 3）
             encoding: ファイルエンコーディング（デフォルト: utf-8）
             serializer: カスタムシリアライザ関数（デフォルト: JSON）
-            clean_output: 出力をクリーニングするか（デフォルト: True）
             append: 追記モードで開くか（デフォルト: False）
                    True の場合、既存ファイルに追記する（処理再開時に使用）
         """
@@ -161,7 +133,6 @@ class AsyncBufferedWriter:
         self._max_retries = max_retries
         self._encoding = encoding
         self._serializer = serializer or self._default_serializer
-        self._clean_output = clean_output
         self._append = append
 
         # 内部状態
@@ -173,7 +144,6 @@ class AsyncBufferedWriter:
         self._running = False
         self._total_written: int = 0
         self._total_errors: int = 0
-        self._total_cleaned: int = 0
         self._fallback_buffer: List[str] = []  # フォールバック用バッファ
 
     @staticmethod
@@ -262,17 +232,9 @@ class AsyncBufferedWriter:
 
         Returns:
             書き込みに成功した場合はTrue、失敗した場合はFalse
-
-        Note:
-            入力dataはDict型であり、json.dumpsでシリアライズした時点で
-            有効なJSON形式が保証されるため、clean_jsonl_lineによる
-            再パース・正規化処理はスキップされる（パフォーマンス最適化）。
         """
         try:
-            line = self._serializer(data)
-            # 入力がDictでシリアライズが成功した場合、有効なJSON形式であることが保証される
-            # clean_jsonl_lineによる再パース・正規化は不要（CPUリソースの節約）
-            line = line + "\n"
+            line = self._serializer(data) + "\n"
         except Exception as e:
             self._total_errors += 1
             print(
@@ -299,21 +261,13 @@ class AsyncBufferedWriter:
 
         Returns:
             正常に追加されたデータの件数
-
-        Note:
-            入力dataはDict型であり、json.dumpsでシリアライズした時点で
-            有効なJSON形式が保証されるため、clean_jsonl_lineによる
-            再パース・正規化処理はスキップされる（パフォーマンス最適化）。
         """
         success_count = 0
         lines: List[str] = []
 
         for data in data_list:
             try:
-                line = self._serializer(data)
-                # 入力がDictでシリアライズが成功した場合、有効なJSON形式であることが保証される
-                # clean_jsonl_lineによる再パース・正規化は不要（CPUリソースの節約）
-                line = line + "\n"
+                line = self._serializer(data) + "\n"
                 lines.append(line)
                 success_count += 1
             except Exception as e:
@@ -437,11 +391,6 @@ class AsyncBufferedWriter:
         return self._total_errors
 
     @property
-    def total_cleaned(self) -> int:
-        """クリーニングされた総件数を返す。"""
-        return self._total_cleaned
-
-    @property
     def buffer_size(self) -> int:
         """現在のバッファ内の件数を返す。"""
         return len(self._buffer)
@@ -483,7 +432,9 @@ def count_lines_fast(path: str) -> Optional[int]:
     return None
 
 
-def read_jsonl(path: str, max_inputs: Optional[int] = None, skip_lines: int = 0) -> Iterator[Dict[str, Any]]:
+def read_jsonl(
+    path: str, max_inputs: Optional[int] = None, skip_lines: int = 0
+) -> Iterator[Dict[str, Any]]:
     """
     JSONLファイルをジェネレータとして読み込む（省メモリ版）。
 
@@ -514,7 +465,9 @@ def read_jsonl(path: str, max_inputs: Optional[int] = None, skip_lines: int = 0)
                 count += 1
 
 
-def read_csv(path: str, max_inputs: Optional[int] = None, skip_lines: int = 0) -> Iterator[Dict[str, Any]]:
+def read_csv(
+    path: str, max_inputs: Optional[int] = None, skip_lines: int = 0
+) -> Iterator[Dict[str, Any]]:
     """
     CSVファイルをジェネレータとして読み込む（省メモリ版）。
 

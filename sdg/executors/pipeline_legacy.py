@@ -22,7 +22,7 @@ from .python import _load_python_function, _execute_python_block_single
 from .ai import _build_clients, _build_multimodal_content
 from .scheduling import (
     BatchProgressiveRelease,
-    MemoryConfig,
+    SchedulingMemoryConfig,
 )
 
 
@@ -73,7 +73,7 @@ async def run_pipeline(
     )
 
     # Phase 2: バッチ処理用段階的メモリ解放
-    memory_config = MemoryConfig(
+    memory_config = SchedulingMemoryConfig(
         enable_memory_optimization=enable_memory_optimization,
         enable_monitoring=enable_memory_monitoring,
         gc_interval=gc_interval,

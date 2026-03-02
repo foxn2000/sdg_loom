@@ -375,14 +375,23 @@ cat test_output.jsonl
 
 ### 3. デバッグモード
 
-問題がある場合は、詳細ログを有効化：
+問題がある場合は、`test-run` を使って詳細ログ付きで素早くデバッグできます（デフォルトでverboseが有効）：
 
 ```bash
-# 環境変数でログレベルを設定
-export PYTHONPATH=.
-python -m sdg run --yaml flows/yaml/your_flow.yaml \
-                  --input test_input.jsonl \
-                  --output test_output.jsonl
+# test-run で素早くデバッグ（1件処理、デフォルトでverbose有効）
+sdg test-run --yaml flows/yaml/your_flow.yaml \
+             --input test_input.jsonl
+
+# 先頭100件の中からランダムに1件選択して多様なテスト
+sdg test-run --yaml flows/yaml/your_flow.yaml \
+             --input test_input.jsonl \
+             --random-input
+
+# 詳細ログを有効にして全件実行
+sdg run --yaml flows/yaml/your_flow.yaml \
+        --input test_input.jsonl \
+        --output test_output.jsonl \
+        --verbose
 ```
 
 ---

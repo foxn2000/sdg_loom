@@ -42,7 +42,7 @@ sdg run --yaml examples/sdg_demo.yaml --dataset squad --split validation --outpu
 
 ### テスト実行コマンド
 
-[`test-run`](../sdg/cli.py:469)コマンドを使用すると、YAMLブループリントの動作を素早く確認できます。最初のデータ項目のみを処理し、デフォルトで詳細ログが有効になっています。
+[`test-run`](../sdg/cli.py:508)コマンドを使用すると、YAMLブループリントの動作を素早く確認できます。最初のデータ項目のみを処理し、デフォルトで詳細ログが有効になっています。
 
 **基本的な使用方法:**
 
@@ -58,6 +58,12 @@ sdg test-run --yaml examples/sdg_demo.yaml --dataset squad --split validation
 
 # 日本語UIでテスト実行
 sdg test-run --yaml examples/sdg_demo.yaml --input data.jsonl --ui-locale ja
+
+# 先頭100件の中からランダムに1件選択してテスト実行
+sdg test-run --yaml examples/sdg_demo.yaml --input data.jsonl --random-input
+
+# 最終結果にメタ情報（実行時間・行インデックス）を表示
+sdg test-run --yaml examples/sdg_demo.yaml --input data.jsonl --meta
 ```
 
 **オプション:**
@@ -73,6 +79,8 @@ sdg test-run --yaml examples/sdg_demo.yaml --input data.jsonl --ui-locale ja
 | `--ui-locale {en,ja}` | ログ出力のUI言語（デフォルト: en） |
 | `--verbose`, `-v` | 詳細ログを有効化（デフォルト: 有効） |
 | `--no-verbose` | 詳細ログを無効化 |
+| `--random-input` | 先頭100件の中からランダムに1件を選択して実行 |
+| `--meta` | 最終結果にメタ情報（実行時間、行インデックス等）を表示 |
 
 **特徴:**
 
@@ -80,6 +88,8 @@ sdg test-run --yaml examples/sdg_demo.yaml --input data.jsonl --ui-locale ja
 - 詳細ログがデフォルトで有効（`--no-verbose`で無効化可能）
 - 詳細な実行ログと最終結果をJSONとして出力
 - ローカルファイル（JSONL/CSV）とHugging Face Datasetsの両方をサポート
+- `--random-input` で先頭100件の中からランダムに1件を選択（多様なテストに有効）
+- `--meta` で実行時間・行インデックスなどのメタ情報を結果に追加
 - 本番実行前のYAMLブループリントのデバッグと検証に便利
 
 **出力例:**
@@ -403,6 +413,43 @@ sdg --yaml pipeline.yaml --input data.jsonl --output result.jsonl
 
 ### 基本的な使用方法
 
+**推奨: `PipelineEngine` API**
+
+[`PipelineEngine`](../sdg/pipeline/engine.py:41) は全パイプライン実行パスを集約した統合実行エンジンです。[`RunConfig`](../sdg/pipeline/run_config.py:96) と組み合わせて使用します：
+
+```python
+from sdg.config import load_config
+from sdg.runner import (
+    PipelineEngine,
+    RunConfig,
+    ConcurrencyConfig,
+    DataSourceConfig,
+)
+
+cfg = load_config("examples/sdg_demo.yaml")
+run_config = RunConfig(
+    concurrency=ConcurrencyConfig(max_concurrent=8),
+    data_source=DataSourceConfig(input_path="examples/data/input.jsonl"),
+)
+engine = PipelineEngine(cfg, run_config)
+engine.run("output/result.jsonl")
+```
+
+**シンプルなヘルパー API (`run_streaming`):**
+
+```python
+from sdg.runner import run_streaming
+
+run_streaming(
+    yaml_path="examples/sdg_demo.yaml",
+    input_path="examples/data/input.jsonl",
+    output_path="output/result.jsonl",
+    max_concurrent=8,
+)
+```
+
+**レガシーインメモリバッチ API (`run_pipeline`):**
+
 ```python
 import asyncio
 from sdg.config import load_config
@@ -418,15 +465,8 @@ async def main():
         {"UserInput": "機械学習について説明してください"},
     ]
     
-    # 3. パイプラインを実行
-    results = await run_pipeline(
-        cfg,
-        dataset,
-        max_batch=4,
-        min_batch=1,
-        target_latency_ms=3000,
-        save_intermediate=False,
-    )
+    # 3. パイプラインを実行（結果の辞書リストを返す）
+    results = await run_pipeline(cfg, dataset)
     
     # 4. 結果を処理
     for result in results:

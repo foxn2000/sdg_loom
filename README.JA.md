@@ -223,25 +223,31 @@ sdg run \
 
 ### Python APIによる利用
 
+**シンプルなストリーミング実行（推奨）:**
+
+```python
+from sdg.runner import run_streaming
+
+run_streaming(
+    yaml_path="pipeline.yaml",
+    input_path="data/input.jsonl",
+    output_path="output/result.jsonl",
+    max_concurrent=8,
+)
+```
+
+**`PipelineEngine` を使った詳細制御:**
+
 ```python
 from sdg.config import load_config
-from sdg.executors import run_pipeline
-import asyncio
+from sdg.runner import PipelineEngine, RunConfig, ConcurrencyConfig
 
-# 設定をロード
 cfg = load_config("pipeline.yaml")
-
-# データセットを準備
-dataset = [
-    {"UserInput": "AIとは何ですか？"},
-    {"UserInput": "機械学習を説明してください"}
-]
-
-# 非同期処理でパイプライン実行
-results = asyncio.run(run_pipeline(cfg, dataset))
-
-for result in results:
-    print(result)
+run_config = RunConfig(
+    concurrency=ConcurrencyConfig(max_concurrent=8),
+)
+engine = PipelineEngine(cfg, run_config)
+engine.run("output/result.jsonl")
 ```
 
 ---
@@ -301,5 +307,3 @@ SDG-Nexusへの貢献を歓迎しています！
 問題報告や機能リクエストは [GitHub Issues](https://github.com/your-repository/issues) をご利用ください。
 
 ---
-
-以上のように構造化と詳細な情報を追加することで、より包括的かつ実用的なREADMEになっています。
