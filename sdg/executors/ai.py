@@ -255,6 +255,12 @@ async def _execute_ai_block_single(
 
             req_params["extra_body"]["reasoning"] = reasoning_config
 
+    # OpenRouter プロバイダールーティング設定
+    if model_def.provider:
+        if "extra_body" not in req_params:
+            req_params["extra_body"] = {}
+        req_params["extra_body"]["provider"] = model_def.provider
+
     # 単一チャット呼び出し
     retry_cfg = dict(req_params.get("retry") or {})
     # 最適化オプションからretry_on_empty設定を取得

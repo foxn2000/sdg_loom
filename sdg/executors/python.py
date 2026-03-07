@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 from ..config import PyBlock, SDGConfig
 from ..utils import render_template
-from .core import ExecutionContext
+from .core import ExecutionContext, _PURE_VAR_RE, _resolve_raw_value, _maybe_parse_json
 
 
 class PythonContext:
@@ -93,8 +93,14 @@ def _execute_python_block_single(
         kwargs = {}
         for k, v in block.inputs.items():
             if isinstance(v, str):
-                # テンプレート形式の場合は展開（グローバル変数も参照可能）
-                kwargs[k] = render_template(v, extended_ctx)
+                # テンプレートが単一変数参照（例: "{messages}"）の場合、
+                # 型を保持して生の値を渡す（list/dict等がstr化されるのを防ぐ）
+                m = _PURE_VAR_RE.match(v)
+                if m:
+                    raw = _resolve_raw_value(m.group(1), extended_ctx)
+                    kwargs[k] = _maybe_parse_json(raw)
+                else:
+                    kwargs[k] = render_template(v, extended_ctx)
             else:
                 kwargs[k] = v
         out = fn(py_ctx, **kwargs)

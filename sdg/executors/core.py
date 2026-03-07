@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 from collections import ChainMap
+from collections.abc import Mapping
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 import re
@@ -217,6 +218,43 @@ def _eval_cond(
     return _truthy(render_template(json.dumps(cond), ctx))
 
 
+# テンプレートが単一変数参照（例: "{FinalOutput}"）かどうかを判定する正規表現
+_PURE_VAR_RE = re.compile(r"^\s*\{([A-Za-z0-9_\.\-]+)\}\s*$")
+
+
+def _resolve_raw_value(key: str, ctx: Any) -> Any:
+    """コンテキストから生の値を取得（型を保持）。
+    ドット区切りのキーに対応し、見つからない場合は空文字列を返す。"""
+    cur: Any = ctx
+    for part in key.split("."):
+        if isinstance(cur, Mapping) and part in cur:
+            cur = cur[part]
+        else:
+            return ""
+    return cur
+
+
+def _maybe_parse_json(value: Any) -> Any:
+    """文字列がJSON構造体（dict/list）を表す場合、パースして返す。
+    プリミティブ値（数値・文字列・bool）はパースしない。
+    パースに失敗した場合は元の値をそのまま返す。"""
+    if not isinstance(value, str):
+        return value
+    stripped = value.strip()
+    if not stripped:
+        return value
+    first_char = stripped[0]
+    if first_char not in ("{", "["):
+        return value
+    try:
+        parsed = json.loads(stripped)
+        if isinstance(parsed, (dict, list)):
+            return parsed
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return value
+
+
 def _execute_end_block_single(
     block: EndBlock,
     ctx: Dict[str, Any],
@@ -232,7 +270,16 @@ def _execute_end_block_single(
     for f in block.final or []:
         name = f.get("name")
         value_tmpl = f.get("value", "")
-        out_map[name] = render_template(value_tmpl, extended_ctx)
+
+        # テンプレートが単一変数参照の場合、型を保持して生の値を渡す
+        # これにより json.dumps() で文字列化された dict/list が
+        # JSONL出力時に二重エンコードされる問題を防ぐ
+        m = _PURE_VAR_RE.match(value_tmpl)
+        if m:
+            raw = _resolve_raw_value(m.group(1), extended_ctx)
+            out_map[name] = _maybe_parse_json(raw)
+        else:
+            out_map[name] = render_template(value_tmpl, extended_ctx)
 
     # v2: include_vars
     if block.include_vars:

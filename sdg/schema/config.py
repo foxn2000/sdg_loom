@@ -141,6 +141,8 @@ class ModelConfig(BaseModel):
     reasoning_max_tokens: Optional[int] = None
     include_reasoning: bool = True
     exclude_reasoning: bool = False
+    # OpenRouter プロバイダールーティング設定
+    provider: Optional[Dict[str, Any]] = None
 
     @field_validator("api_key", mode="before")
     @classmethod
