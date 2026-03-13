@@ -1,5 +1,7 @@
 # SDG-LOOM
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/foxn2000/sdg_loom)
+
 <img width="1024" alt="SDG-LOOM Logo" src="assets/logo.png" />
 
 ## 概要
