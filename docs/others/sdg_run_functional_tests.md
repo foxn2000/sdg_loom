@@ -780,4 +780,4 @@ time sdg run --yaml examples/3d_scaling_agent.yaml \
 
 **作成日**: 2025-12-07
 **バージョン**: 1.0
-**対象**: SDG Nexus v2.0+
+**対象**: SDG-LOOM v2.0+

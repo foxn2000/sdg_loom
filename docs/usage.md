@@ -738,7 +738,7 @@ sdg run \
 
 ## Advanced Optimization
 
-SDG Nexus provides advanced optimization features for high-throughput LLM inference workloads. These features are particularly useful when working with vLLM or SGLang backends.
+SDG-LOOM provides advanced optimization features for high-throughput LLM inference workloads. These features are particularly useful when working with vLLM or SGLang backends.
 
 ### Adaptive Concurrency Control
 
@@ -1045,7 +1045,7 @@ await collector.stop()
 
 ## Phase 2 Optimization
 
-SDG Nexus Phase 2 introduces advanced optimizations for scalability and memory efficiency. These features are **opt-in** and disabled by default, ensuring backward compatibility.
+SDG-LOOM Phase 2 introduces advanced optimizations for scalability and memory efficiency. These features are **opt-in** and disabled by default, ensuring backward compatibility.
 
 ### Hierarchical Task Scheduling
 

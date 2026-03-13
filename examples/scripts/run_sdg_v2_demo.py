@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SDG Nexus - MABEL v2.0 機能デモ
+SDG-LOOM - MABEL v2.0 機能デモ
 
 このスクリプトはMABEL v2.0の新機能（MEX式、グローバル変数、While、インラインPython等）を
 Python APIから使用する方法を示します。
@@ -238,7 +238,7 @@ async def demo_simple_pipeline():
 async def main():
     """メイン関数"""
     print("=" * 60)
-    print("SDG Nexus - MABEL v2.0 機能デモ")
+    print("SDG-LOOM - MABEL v2.0 機能デモ")
     print("=" * 60)
 
     # MEX式のデモ

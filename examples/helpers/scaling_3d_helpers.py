@@ -1,5 +1,5 @@
 """
-SDG Nexus - 三次元スケーリング推論エージェント用ヘルパー関数
+SDG-LOOM - 三次元スケーリング推論エージェント用ヘルパー関数
 
 対応YAML: examples/3d_scaling_agent.yaml
 

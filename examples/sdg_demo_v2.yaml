@@ -7,7 +7,7 @@ mabel:
 # v2: グローバル変数/定数
 globals:
   const:
-    APP_NAME: "SDG Nexus v2"
+    APP_NAME: "SDG-LOOM v2"
     MAX_ITERATIONS: 3
   vars:
     counter: 0

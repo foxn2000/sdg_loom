@@ -1,10 +1,10 @@
-# SDG Nexus
+# SDG-LOOM
 
-<img width="1024" height="1024" alt="85e322d3-e585-48dd-aee3-bfded051564a" src="https://github.com/user-attachments/assets/7d1b2045-e81b-406f-9f0b-15a16dc7ef24" />
+<img width="1024" alt="SDG-LOOM Logo" src="assets/logo.png" />
 
 ## Overview
 
-**SDG-Nexus (Scalable Data Generator Nexus)** is a framework designed to efficiently generate synthetic datasets for LLMs (Large Language Models) and perform large-scale data analysis using AI agents. It is specifically designed for use cases that require parallel operation of numerous AI agents and high-speed batch processing, achieving significant improvements in processing capacity and flexibility compared to traditional methods.
+**SDG-LOOM (Scalable Data Generator LOOM)** is a framework designed to efficiently generate synthetic datasets for LLMs (Large Language Models) and perform large-scale data analysis using AI agents. It is specifically designed for use cases that require parallel operation of numerous AI agents and high-speed batch processing, achieving significant improvements in processing capacity and flexibility compared to traditional methods.
 
 By adopting the latest **MABEL (Model And Blocks Expansion Language) v2.0**, it enables highly descriptive and flexible structured agent programs. Additionally, it allows simultaneous operation of different LLM models, making load balancing and performance optimization easy. This makes it highly effective for tasks such as large-scale data analysis using LLMs, data augmentation, real-time inference, and synthetic data generation.
 
@@ -276,7 +276,7 @@ See the [LICENSE](LICENSE) file for details.
 
 ## Contributing 🤝
 
-Contributions to SDG-Nexus are welcome!
+Contributions to SDG-LOOM are welcome!
 When submitting pull requests, please ensure:
 
 * MABEL v1 compatibility is maintained

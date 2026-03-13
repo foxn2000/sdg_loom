@@ -1,5 +1,5 @@
 """
-SDG Nexus - 質問生成エージェントv2用ヘルパー関数
+SDG-LOOM - 質問生成エージェントv2用ヘルパー関数
 
 対応YAML: examples/question_generator_agent_v2.yaml
 

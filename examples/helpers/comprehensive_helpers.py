@@ -1,5 +1,5 @@
 """
-SDG Nexus - 包括的デモ用ヘルパー関数
+SDG-LOOM - 包括的デモ用ヘルパー関数
 
 対応YAML: examples/sdg_comprehensive_v2.yaml
 

@@ -700,7 +700,7 @@ runtime:
 
 globals:
   const:
-    APP_NAME: "SDG Nexus v2"
+    APP_NAME: "SDG-LOOM v2"
     MAX_TURNS: 3
   vars:
     counter: 0

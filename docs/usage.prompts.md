@@ -20,7 +20,7 @@ This document explains how to efficiently create MABEL flows (YAML-formatted AI 
 
 **What is MABEL?**
 
-MABEL (Model And Blocks Expansion Language) is a language specification that allows you to declaratively describe AI agent processing flows in YAML format. Used by SDG Nexus, it enables you to define complex AI workflows in a structured manner.
+MABEL (Model And Blocks Expansion Language) is a language specification that allows you to declaratively describe AI agent processing flows in YAML format. Used by SDG-LOOM, it enables you to define complex AI workflows in a structured manner.
 
 For more details, refer to:
 - [MABEL v2 Complete Specification](./mabel/mabel_v2_en.md)
@@ -65,7 +65,7 @@ Send the following prompt to your AI coding agent to generate MABEL flows.
 ```markdown
 ## Prompt Objective
 
-Referring to the currently operational AI agent system (SDG Nexus) implementation, create a clear and operationally guaranteed YAML file in MABEL flow format based on the specified logic.
+Referring to the currently operational AI agent system (SDG-LOOM) implementation, create a clear and operationally guaranteed YAML file in MABEL flow format based on the specified logic.
 
 ## Tasks to Perform
 

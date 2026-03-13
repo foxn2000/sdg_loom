@@ -1326,7 +1326,7 @@ budgets:
 # グローバル変数の初期化
 globals:
   const:  # 定数（上書き不可）
-    APP_NAME: "SDG Nexus Comprehensive Demo"
+    APP_NAME: "SDG-LOOM Comprehensive Demo"
     VERSION: "2.0.0"
   vars:  # 変数（実行中に変更可能）
     counter: 0

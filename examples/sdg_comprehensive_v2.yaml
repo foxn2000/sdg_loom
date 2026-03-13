@@ -26,7 +26,7 @@ budgets:
 # v2: グローバル変数/定数
 globals:
   const:
-    APP_NAME: "SDG Nexus Comprehensive Demo"
+    APP_NAME: "SDG-LOOM Comprehensive Demo"
     VERSION: "2.0.0"
     MAX_FIBONACCI: 15
   vars:

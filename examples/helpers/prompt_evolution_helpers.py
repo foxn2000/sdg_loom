@@ -1,5 +1,5 @@
 """
-SDG Nexus - プロンプト進化エージェント用ヘルパー関数
+SDG-LOOM - プロンプト進化エージェント用ヘルパー関数
 
 対応YAML: examples/prompt_evolution_agent.yaml
 

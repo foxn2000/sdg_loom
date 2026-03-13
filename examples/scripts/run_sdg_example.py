@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SDG Nexus - Python API サンプルコード
+SDG-LOOM - Python API サンプルコード
 
 このスクリプトはPython APIを使用してSDGパイプラインを実行する方法を示します。
 
@@ -64,7 +64,7 @@ async def run_example():
     output_path = project_root / "output" / "python_api_result.jsonl"
 
     print("=" * 60)
-    print("SDG Nexus - Python API サンプル")
+    print("SDG-LOOM - Python API サンプル")
     print("=" * 60)
 
     # ===== 方法1: JSONLファイルからデータを読み込んで実行 =====
