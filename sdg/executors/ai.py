@@ -283,16 +283,20 @@ async def _execute_ai_block_single(
     if result.error:
         raise result.error
 
-    # Reasoningがある場合は<think>タグで囲んで出力に含める
-    # ただし、enable_reasoningが有効で、かつinclude_reasoningがTrueの場合のみ
+    # Reasoningがある場合の処理
     text = result.content or ""
-    if (
-        model_def.enable_reasoning
-        and model_def.include_reasoning
-        and not model_def.exclude_reasoning
-        and result.reasoning
-    ):
-        text = f"<think>{result.reasoning}</think>\n{text}"
+
+    if model_def.enable_reasoning and result.reasoning:
+        if not text.strip():
+            # contentが空でreasoningに内容がある場合:
+            # OpenRouter等で非reasoningモデルにreasoning機能を使用した際、
+            # モデルの出力全体がreasoningフィールドに入ることがある。
+            # この場合、reasoningの内容をcontentとして使用する。
+            text = result.reasoning
+        elif model_def.include_reasoning and not model_def.exclude_reasoning:
+            # contentにも内容があり、reasoningを含める設定の場合は
+            # <think>タグで囲んで先頭に追加する
+            text = f"<think>{result.reasoning}</think>\n{text}"
 
     out_map = _apply_outputs(
         text,

@@ -299,6 +299,44 @@ class BatchOptimizer:
         # else: keep current batch size (latency is in acceptable range)
 
 
+def _extract_reasoning(message) -> str | None:
+    """
+    LLMレスポンスのメッセージからreasoning（思考プロセス）を抽出する。
+
+    OpenAI SDK v2ではreasoningフィールドが標準model_fieldsに含まれないため、
+    複数のソースから取得を試みる:
+      1. message.reasoning (将来のSDKバージョン / カスタムフィールド)
+      2. message.reasoning_content (OpenAI o-series / GPT-5系)
+      3. message.model_extra (Pydantic v2のextraフィールド - OpenRouter等)
+
+    Args:
+        message: ChatCompletionMessageオブジェクト
+
+    Returns:
+        reasoning文字列、またはNone
+    """
+    # 1. 標準的なreasoningフィールド
+    reasoning = getattr(message, "reasoning", None)
+    if reasoning:
+        return reasoning
+
+    # 2. reasoning_content (OpenAI o-series / GPT-5系)
+    reasoning = getattr(message, "reasoning_content", None)
+    if reasoning:
+        return reasoning
+
+    # 3. Pydantic v2 model_extra (OpenRouter等のカスタムフィールド)
+    model_extra = getattr(message, "model_extra", None)
+    if model_extra and isinstance(model_extra, dict):
+        reasoning = model_extra.get("reasoning") or model_extra.get(
+            "reasoning_content"
+        )
+        if reasoning:
+            return reasoning
+
+    return None
+
+
 class LLMClient:
     """
     LLM APIクライアント。
@@ -537,9 +575,9 @@ class LLMClient:
                     content = resp.choices[0].message.content
 
                     # Reasoning抽出
-                    reasoning = None
-                    if hasattr(resp.choices[0].message, "reasoning"):
-                        reasoning = resp.choices[0].message.reasoning
+                    # OpenAI SDK v2ではreasoningフィールドが標準model_fieldsにないため、
+                    # 複数のソースから取得を試みる
+                    reasoning = _extract_reasoning(resp.choices[0].message)
 
                     # トークン使用量を抽出
                     prompt_tokens = 0
@@ -551,7 +589,8 @@ class LLMClient:
                         total_tokens = getattr(resp.usage, "total_tokens", 0) or 0
 
                     # 空返答チェック: contentがNone、空文字列、またはwhitespaceのみの場合
-                    if retry_on_empty and (content is None or not content.strip()):
+                    # ただし、reasoningに内容がある場合は空返答とみなさない
+                    if retry_on_empty and (content is None or not content.strip()) and not reasoning:
                         # まだ空返答リトライ回数が残っている場合はリトライ
                         if empty_retry_count < max_empty_retries - 1:
                             await asyncio.sleep(delay_ms / 1000.0)

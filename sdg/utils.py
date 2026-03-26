@@ -49,12 +49,33 @@ def render_template(s: str, ctx: Dict[str, Any]) -> str:
 
 
 def extract_by_tag(text: str, tag: str) -> list[str]:
+    # <think>...</think> ブロックを事前除去
+    # reasoning（思考プロセス）テキスト内にタグ名が言及されると
+    # 抽出パターンが干渉するため、先に除去する
+    text_clean = re.sub(
+        r"<\s*think\s*>.*?<\s*/\s*think\s*>",
+        "",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
     # Extract <tag>...</tag> ignoring case and allowing newlines
     pattern = re.compile(
         rf"<\s*{re.escape(tag)}\s*>(.*?)<\s*/\s*{re.escape(tag)}\s*>",
         re.IGNORECASE | re.DOTALL,
     )
-    results = pattern.findall(text)
+    results = pattern.findall(text_clean)
+
+    # フォールバック: 閉じタグが無い場合（LLMが閉じタグを出力しないケース）
+    # 開きタグ以降の全テキストを抽出する
+    if not results:
+        fallback_pattern = re.compile(
+            rf"<\s*{re.escape(tag)}\s*>(.*)",
+            re.IGNORECASE | re.DOTALL,
+        )
+        fallback_match = fallback_pattern.search(text_clean)
+        if fallback_match:
+            results = [fallback_match.group(1)]
 
     # 抽出結果から他タグの残骸を除去（例: </think> が先頭に残る場合）
     cleaned = []

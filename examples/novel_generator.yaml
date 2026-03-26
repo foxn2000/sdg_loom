@@ -1,0 +1,137 @@
+# 小説生成フロー
+# 二段階処理:
+#   1. seedデータから小説生成用プロンプトをLLMで作成
+#   2. 作成したプロンプトを元に小説をLLMで生成
+# 最終出力: input（生成プロンプト）, output（小説本文）
+
+mabel:
+  version: "2.0"
+  id: "com.example.agent.novel_generator"
+  name: "Novel Generator"
+  description: "seedデータから小説生成プロンプトを作成し、そのプロンプトで小説を生成する二段階フロー"
+
+# モデル設定（OpenRouter経由）
+models:
+  - name: openrouter
+    api_model: "openai/gpt-oss-120b"
+    api_key: "${ENV.OPENROUTER_API_KEY}"
+    base_url: https://openrouter.ai/api/v1
+    enable_reasoning: true         # Enable reasoning feature (required)
+    include_reasoning: true        # Include reasoning in response
+    reasoning_effort: low          # Effort level: low/medium/high/xhigh/minimal
+    exclude_reasoning: false       # Do not exclude reasoning
+    request_defaults:
+      temperature: 0.8
+      max_tokens: 12000
+
+# グローバル変数
+globals:
+  vars:
+    generated_prompt: ""
+    novel_text: ""
+
+# 予算設定
+budgets:
+  loops:
+    max_iters: 10
+    on_exceed: "truncate"
+  recursion:
+    max_depth: 8
+    on_exceed: "error"
+  wall_time_ms: 600000
+  ai:
+    max_calls: 10
+    max_tokens: 100000
+
+blocks:
+  # ============================================================
+  # ステップ1: seedデータから小説生成用プロンプトを作成
+  # ============================================================
+  - type: ai
+    exec: 1
+    id: generate_prompt
+    name: "Step 1: Generate Novel Prompt from Seed"
+    model: openrouter
+    system_prompt: |
+      あなたはプロの小説家であり、創作プロンプトの設計者です。
+      与えられた設定情報（ジャンル、テーマ、舞台、主人公、物語の起点、雰囲気、文体、長さ）を元に、
+      小説を執筆するための詳細で具体的なプロンプトを作成してください。
+
+      プロンプトには以下を含めてください：
+      - 物語の冒頭シーンの具体的な描写指示
+      - 主人公の心理・動機の方向性
+      - 物語の展開の核となる対立や葛藤
+      - 結末の方向性のヒント（ただし具体的すぎない程度に）
+      - 指定された文体・雰囲気を反映した文章トーンの指示
+
+      出力は <prompt> タグで囲んでください。
+    prompts:
+      - |
+        以下の設定情報を元に、小説執筆用の詳細なプロンプトを作成してください。
+
+        【設定情報】
+        {input}
+
+        上記の要素を全て活かした、魅力的な小説を書くための具体的なプロンプトを生成してください。
+    outputs:
+      - name: NovelPrompt
+        select: tag
+        tag: prompt
+    save_to:
+      vars:
+        generated_prompt: NovelPrompt
+
+  # ============================================================
+  # ステップ2: 生成したプロンプトを元に小説を執筆
+  # ============================================================
+  - type: ai
+    exec: 2
+    id: write_novel
+    name: "Step 2: Write Novel from Generated Prompt"
+    model: openrouter
+    system_prompt: |
+      あなたはプロの小説家です。
+      与えられたプロンプトに忠実に従い、高品質な小説を執筆してください。
+
+      執筆のルール：
+      - プロンプトで指定されたジャンル、雰囲気、文体を厳守すること
+      - 冒頭から読者を引き込む魅力的な文章を書くこと
+      - キャラクターの感情や心理描写を丁寧に行うこと
+      - 物語として完結させること（起承転結を備える）
+      - 指定された長さに収めること
+
+      タイトルは小説本文の冒頭に含めてください。
+      小説本文のみを出力してください。余計な説明や注釈は不要です。
+    prompts:
+      - |
+        以下のプロンプトに従って小説を執筆してください。
+
+        {NovelPrompt}
+    outputs:
+      - name: NovelText
+        select: full
+    save_to:
+      vars:
+        novel_text: NovelText
+
+  # ============================================================
+  # 終了ブロック
+  # ============================================================
+  - type: end
+    exec: 100
+    reason: "novel_generation_completed"
+    exit_code: "success"
+    final:
+      - name: input
+        value: "{NovelPrompt}"
+      - name: output
+        value: "{NovelText}"
+    final_mode: "map"
+
+# ============================================================
+# 実行コマンド:
+# python -m sdg run \
+#   --yaml examples/novel_generator.yaml \
+#   --input examples/data/novel_seeds.jsonl \
+#   --output output/novels.jsonl
+# ============================================================
